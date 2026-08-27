@@ -2,7 +2,6 @@
 import 'package:provider/provider.dart';
 import '../services/database_service.dart';
 
-// Helper Glassmorphism Card Widget
 class GlassCard extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry padding;
@@ -29,7 +28,6 @@ class GlassCard extends StatelessWidget {
   }
 }
 
-// User Authentication Scaffold Layout
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
   @override
@@ -37,11 +35,42 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _formKey = GlobalKey<FormState>();
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text("SHE SHIELD Login"), backgroundColor: Colors.purple),
-      body: const Center(child: Text("Authentication Forms")),
+      body: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            children: [
+              TextFormField(
+                controller: _emailController,
+                decoration: const InputDecoration(labelText: "Email"),
+                validator: (val) => val == null || val.isEmpty ? "Email is required" : null,
+              ),
+              TextFormField(
+                controller: _passwordController,
+                obscureText: true,
+                decoration: const InputDecoration(labelText: "Password"),
+                validator: (val) => val == null || val.length < 6 ? "Minimum 6 chars" : null,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
