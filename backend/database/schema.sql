@@ -1,0 +1,4 @@
+﻿CREATE TABLE IF NOT EXISTS user_credentials (
+    id SERIAL PRIMARY KEY,
+    user_id INT UNIQUE NOT NULL
+);
