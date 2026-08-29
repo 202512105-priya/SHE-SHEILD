@@ -2,3 +2,6 @@
     id SERIAL PRIMARY KEY,
     user_id INT UNIQUE NOT NULL
 );
+
+ALTER TABLE user_credentials ADD COLUMN hashed_password VARCHAR(255) NOT NULL;
+ALTER TABLE user_credentials ADD COLUMN salt VARCHAR(100) NOT NULL;
