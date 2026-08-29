@@ -193,6 +193,20 @@ def execute_parameterized_query(
 
 
 # =====================================================================
+# Authentication Security Validators (KAN-39)
+# =====================================================================
+# Security checks module
+
+def validate_auth_payload(payload: Any) -> bool:
+    """
+    Validates baseline authentication request payload structure.
+    """
+    if not isinstance(payload, dict):
+        return False
+    return bool(payload.get("email") and payload.get("password"))
+
+
+# =====================================================================
 # Unit Tests for Database Security Module
 # =====================================================================
 
