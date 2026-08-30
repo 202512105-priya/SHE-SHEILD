@@ -1,1 +1,0 @@
-"\"c:\\Women\\flutter\\bin\\flutter.bat\" config --jdk-dir=\"C:\\Program Files\\Java\\jdk-21.0.10\"\n"
