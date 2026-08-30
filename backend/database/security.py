@@ -206,6 +206,16 @@ def validate_auth_payload(payload: Any) -> bool:
     return bool(payload.get("email") and payload.get("password"))
 
 
+def validate_password_strength(password: str) -> bool:
+    """
+    Validates password strength according to minimum policy requirements.
+    """
+    if not isinstance(password, str):
+        return False
+    return len(password) >= 8
+
+
+
 # =====================================================================
 # Unit Tests for Database Security Module
 # =====================================================================
