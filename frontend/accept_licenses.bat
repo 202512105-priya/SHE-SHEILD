@@ -1,0 +1,1 @@
+"echo y | \"c:\\Women\\flutter\\bin\\flutter.bat\" doctor --android-licenses\n"

@@ -1,0 +1,56 @@
+#
+# There is insufficient memory for the Java Runtime Environment to continue.
+# Native memory allocation (malloc) failed to allocate 1292336 bytes for Chunk::new
+# Possible reasons:
+#   The system is out of physical RAM or swap space
+#   The process is running with CompressedOops enabled, and the Java Heap may be blocking the growth of the native heap
+# Possible solutions:
+#   Reduce memory load on the system
+#   Increase physical memory or swap space
+#   Check if swap backing store is full
+#   Decrease Java heap size (-Xmx/-Xms)
+#   Decrease number of Java threads
+#   Decrease Java thread stack sizes (-Xss)
+#   Set larger code cache with -XX:ReservedCodeCacheSize=
+#   JVM is running with Unscaled Compressed Oops mode in which the Java heap is
+#     placed in the first 4GB address space. The Java Heap base address is the
+#     maximum limit for the native heap growth. Please use -XX:HeapBaseMinAddress
+#     to set the Java Heap base and to place the Java Heap above 4GB virtual address.
+# This output file may be truncated or incomplete.
+#
+#  Out of Memory Error (arena.cpp:168), pid=436, tid=35120
+#
+# JRE version: Java(TM) SE Runtime Environment (21.0.10+8) (build 21.0.10+8-LTS-217)
+# Java VM: Java HotSpot(TM) 64-Bit Server VM (21.0.10+8-LTS-217, mixed mode, sharing, tiered, compressed oops, compressed class ptrs, serial gc, windows-amd64)
+# No core dump will be written. Minidumps are not enabled by default on client versions of Windows
+#
+
+---------------  S 
+<truncated 45283 bytes>
+00, 0x00000000d4250000, 0x00000000d4a90000)
+ tenured generation   total 169344K, used 28316K [0x00000000e0000000, 0x00000000ea560000, 0x0000000100000000)
+   the space 169344K,  16% used [0x00000000e0000000, 0x00000000e1ba7190, 0x00000000e1ba7200, 0x00000000ea560000)
+ Metaspace       used 48224K, committed 49984K, reserved 278528K
+  class space    used 7047K, committed 7936K, reserved 212992K
+}
+Event: 5.164 GC heap before
+{Heap before GC invocations=8 (full 2):
+ def new generation   total 76352K, used 74402K [0x00000000d0000000, 0x00000000d52d0000, 0x00000000e0000000)
+  eden space 67904K, 100% used [0x00000000d0000000, 0x00000000d4250000, 0x00000000d4250000)
+  from space 8448K,  76% used [0x00000000d4a90000, 0x00000000d50e8a98, 0x00000000d52d0000)
+  to   space 8448K,   0% used [0x00000000d4250000, 0x00000000d4250000, 0x00000000d4a90000)
+ tenured generation   total 169344K, used 28316K [0x00000000e0000000, 0x00000000ea560000, 0x0000000100000000)
+   the space 169344K,  16% used [0x00000000e0000000, 0x00000000e1ba7190, 0x00000000e1ba7200, 0x00000000ea560000)
+ Metaspace       used 55808K, committed 57536K, reserved 278528K
+  class space    used 8015K, committed 8896K, reserved 212992K
+}
+Event: 5.178 GC heap after
+{Heap after GC invocations=9 (full 2):
+ def new generation   total 76352K, used 8448K [0x00000000d0000000, 0x00000000d52d0000, 0x00000000e0000000)
+  eden space 67904K,   0% used [0x00000000d0000000, 0x00000000d0000000, 0x00000000d4250000)
+  from space 8448K, 100% used [0x00000000d4250000, 0x00000000d4a90000, 0x00000000d4a90000)
+  to   space 8448K,   0% used [0x00000000d4a90000, 0x00000000d4a90000, 0x00000000d52d0000)
+ tenured generation   total 169344K, used 32981K [0x00000000e0000000, 0x00000000ea560000, 0x0000000100
+<truncated 24654 bytes>
+
+NOTE: The output was truncated because it was too long. Use a more targeted query or a smaller range to get the information you need.
