@@ -14,6 +14,13 @@ class ApiClient {
     return headers;
   }
 
+  Map<String, String> getAuthHeaders(String token) {
+    return {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer $token"
+    };
+  }
+
   Future<Map<String, dynamic>> login(String email, String password) async {
     final response = await http.post(
       Uri.parse('$baseUrl/api/auth/login'),
