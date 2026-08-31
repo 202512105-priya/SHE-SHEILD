@@ -7,3 +7,7 @@ class ThreatDetector:
 
 
 # AI Service auth hooks
+
+
+def verify_ai_access_permission(user_role):
+    return user_role in ["user", "admin", "responder"]
