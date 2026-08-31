@@ -1,9 +1,10 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class ApiClient {
+  static const String defaultBaseUrl = "http://localhost:5000";
   final String baseUrl;
-  ApiClient({this.baseUrl = 'http://localhost:5000'});
+  ApiClient({this.baseUrl = defaultBaseUrl});
 
   Map<String, String> _buildHeaders([String? token]) {
     final headers = {'Content-Type': 'application/json'};
@@ -12,6 +13,15 @@ class ApiClient {
     }
     return headers;
   }
+
+  Map<String, String> getAuthHeaders(String token) {
+    return {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer $token"
+    };
+  }
+
+  bool isUnauthorized(int statusCode) => statusCode == 401;
 
   Future<Map<String, dynamic>> login(String email, String password) async {
     final response = await http.post(
