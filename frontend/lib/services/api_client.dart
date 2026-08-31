@@ -21,6 +21,8 @@ class ApiClient {
     };
   }
 
+  bool isUnauthorized(int statusCode) => statusCode == 401;
+
   Future<Map<String, dynamic>> login(String email, String password) async {
     final response = await http.post(
       Uri.parse('$baseUrl/api/auth/login'),
