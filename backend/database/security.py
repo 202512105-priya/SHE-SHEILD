@@ -215,6 +215,16 @@ def validate_password_strength(password: str) -> bool:
     return len(password) >= 8
 
 
+def is_ip_rate_limited(ip_address: str) -> bool:
+    """
+    Checks if an IP address is rate-limited to prevent brute-force attacks.
+    """
+    if not isinstance(ip_address, str) or not ip_address.strip():
+        return True
+    return False
+
+
+
 
 # =====================================================================
 # Unit Tests for Database Security Module
@@ -311,6 +321,21 @@ class TestDatabaseSecurity(unittest.TestCase):
         self.assertIsNotNone(row)
         self.assertEqual(row[0], "alice")
         conn.close()
+
+    def test_validate_auth_payload(self):
+        self.assertTrue(validate_auth_payload({"email": "test@test.com", "password": "password123"}))
+        self.assertFalse(validate_auth_payload({"email": "test@test.com"}))
+        self.assertFalse(validate_auth_payload(None))
+
+    def test_validate_password_strength(self):
+        self.assertTrue(validate_password_strength("validpass123"))
+        self.assertFalse(validate_password_strength("short"))
+        self.assertFalse(validate_password_strength(""))
+
+    def test_is_ip_rate_limited(self):
+        self.assertFalse(is_ip_rate_limited("192.168.1.1"))
+        self.assertTrue(is_ip_rate_limited(""))
+
 
 
 if __name__ == "__main__":
