@@ -11,3 +11,8 @@ class ThreatDetector:
 
 def verify_ai_access_permission(user_role):
     return user_role in ["user", "admin", "responder"]
+
+
+def enforce_ai_permission(user_role):
+    if not verify_ai_access_permission(user_role):
+        raise PermissionError("Unauthorized AI access")
