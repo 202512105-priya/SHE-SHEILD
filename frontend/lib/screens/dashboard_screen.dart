@@ -1,24 +1,17 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
-class DashboardScreen extends StatelessWidget {
+class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
+  @override
+  State<DashboardScreen> createState() => _DashboardScreenState();
+}
 
+class _DashboardScreenState extends State<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text("SHE SHIELD Hub"), backgroundColor: Colors.purple),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            ElevatedButton(
-              onPressed: () => Navigator.pushNamed(context, '/sos'),
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.red, padding: const EdgeInsets.all(24)),
-              child: const Text("TRIGGER SOS", style: TextStyle(fontSize: 20)),
-            ),
-          ],
-        ),
-      ),
+      body: const Center(child: Text("Main Mobile Dashboard Scaffold")),
     );
   }
 }
