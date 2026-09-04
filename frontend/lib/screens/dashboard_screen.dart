@@ -7,11 +7,30 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
+  Widget _buildQuickCard(String title, IconData icon, Color color) {
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: ListTile(
+        leading: Icon(icon, color: color, size: 32),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+        trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text("SHE SHIELD Hub"), backgroundColor: Colors.purple),
-      body: const Center(child: Text("Main Mobile Dashboard Scaffold")),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          _buildQuickCard("SOS Emergency Center", Icons.emergency, Colors.red),
+          _buildQuickCard("Safe Travel Monitor", Icons.directions_car, Colors.blue),
+          _buildQuickCard("Cyber Incident Reporting", Icons.security, Colors.indigo),
+        ],
+      ),
     );
   }
 }
