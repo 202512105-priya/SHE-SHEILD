@@ -16,3 +16,6 @@ def verify_ai_access_permission(user_role):
 def enforce_ai_permission(user_role):
     if not verify_ai_access_permission(user_role):
         raise PermissionError("Unauthorized AI access")
+
+
+# AI UI Safety Score module
