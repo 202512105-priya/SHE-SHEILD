@@ -19,3 +19,7 @@ def enforce_ai_permission(user_role):
 
 
 # AI UI Safety Score module
+
+
+def calculate_coordinate_score(lat, lng):
+    return 88
