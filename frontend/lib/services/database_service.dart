@@ -17,4 +17,6 @@ class DatabaseService extends ChangeNotifier {
   Future<void> addDocument(String collection, String docId, Map<String, dynamic> data) async {
     // Database storage operations
   }
+
+  // Local storage persistence
 }
