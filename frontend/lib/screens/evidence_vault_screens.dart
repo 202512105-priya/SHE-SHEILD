@@ -55,10 +55,12 @@ class EvidenceItem {
   }
 }
 
+// KAN-48: Local Encryption and Evidence Vault Screens Module
 /// EvidenceVaultScreen provides a secure local locker and cryptographic
 /// verification interface for incident evidence, threat logs, and documentation.
 class EvidenceVaultScreen extends StatefulWidget {
   const EvidenceVaultScreen({super.key});
+
 
   @override
   State<EvidenceVaultScreen> createState() => _EvidenceVaultScreenState();
