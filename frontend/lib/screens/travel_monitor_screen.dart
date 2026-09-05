@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../services/database_service.dart';
 import 'auth_screens.dart';
 
+// Scaffold TravelMonitorScreen StatefulWidget for role-verified transit monitoring
 class TravelMonitorScreen extends StatefulWidget {
   const TravelMonitorScreen({super.key});
 
