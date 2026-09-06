@@ -143,6 +143,15 @@ class _EvidenceVaultScreenState extends State<EvidenceVaultScreen> {
     }).toList();
   }
 
+  Widget buildLockerCard() {
+    return const Card(
+      child: Padding(
+        padding: EdgeInsets.all(12.0),
+        child: Text("Encrypted Locker Access"),
+      ),
+    );
+  }
+
   void _verifyItemIntegrity(EvidenceItem item) {
     final isValid = item.verifyIntegrity();
     setState(() {
