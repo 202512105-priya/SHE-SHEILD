@@ -17,6 +17,7 @@ class _TravelMonitorScreenState extends State<TravelMonitorScreen> {
   final _durationController = TextEditingController(text: "5");
   
   bool _isTracking = false;
+  bool checkRolePermission(String? role) => role != null;
   int _secondsLeft = 0;
   Timer? _tripTimer;
 
