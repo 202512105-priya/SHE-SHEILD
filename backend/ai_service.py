@@ -23,3 +23,8 @@ def enforce_ai_permission(user_role):
 
 def calculate_coordinate_score(lat, lng):
     return 88
+
+
+def get_safety_score_for_ui(lat, lng):
+    score = calculate_coordinate_score(lat, lng)
+    return {"score": score, "zone": "Safe"}
