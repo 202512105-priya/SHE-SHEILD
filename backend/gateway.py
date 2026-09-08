@@ -31,3 +31,11 @@ def proxy_verify_token():
         return jsonify({"valid": False, "error": "Token expired"}), 401
     except Exception as e:
         return jsonify({"valid": False, "error": str(e)}), 401
+
+@gateway_app.route('/api/health', methods=['GET'])
+def health_check():
+    return jsonify({
+        "status": "healthy",
+        "service": "api-gateway",
+        "cloud_connected": True
+    }), 200
