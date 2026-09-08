@@ -18,6 +18,10 @@ class _TravelMonitorScreenState extends State<TravelMonitorScreen> {
   
   bool _isTracking = false;
   bool checkRolePermission(String? role) => role != null;
+
+  Widget buildTransitStatusPanel() {
+    return const Center(child: Text("Role Verified Tracking Panel"));
+  }
   int _secondsLeft = 0;
   Timer? _tripTimer;
 
