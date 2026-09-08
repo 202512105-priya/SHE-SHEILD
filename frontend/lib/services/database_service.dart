@@ -20,4 +20,8 @@ class DatabaseService extends ChangeNotifier {
 
   // Local storage persistence
   Future<void> saveLocalPref(String key, String val) async {}
+
+  void notifyUIStateChange() {
+    notifyListeners();
+  }
 }
