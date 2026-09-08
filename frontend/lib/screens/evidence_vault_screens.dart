@@ -405,6 +405,27 @@ class _EvidenceVaultScreenState extends State<EvidenceVaultScreen> {
     );
   }
 
+  Widget buildEncryptionBadge() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.2),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.lock, size: 14, color: Colors.white),
+          SizedBox(width: 4),
+          Text(
+            "Encrypted",
+            style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final filtered = _filteredItems;
@@ -412,10 +433,14 @@ class _EvidenceVaultScreenState extends State<EvidenceVaultScreen> {
     return Scaffold(
       backgroundColor: Colors.indigo.shade50.withOpacity(0.4),
       appBar: AppBar(
-        title: const Text("Evidence Vault", style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text("Evidence Vault Security", style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: Colors.indigo,
         foregroundColor: Colors.white,
         actions: [
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12.0),
+            child: buildEncryptionBadge(),
+          ),
           IconButton(
             icon: const Icon(Icons.lock_reset),
             tooltip: "Locker Status",
