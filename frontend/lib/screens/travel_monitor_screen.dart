@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../services/database_service.dart';
 import 'auth_screens.dart';
 
+// Scaffold TravelMonitorScreen StatefulWidget for role-verified transit monitoring
 class TravelMonitorScreen extends StatefulWidget {
   const TravelMonitorScreen({super.key});
 
@@ -16,6 +17,11 @@ class _TravelMonitorScreenState extends State<TravelMonitorScreen> {
   final _durationController = TextEditingController(text: "5");
   
   bool _isTracking = false;
+  bool checkRolePermission(String? role) => role != null;
+
+  Widget buildTransitStatusPanel() {
+    return const Center(child: Text("Role Verified Tracking Panel"));
+  }
   int _secondsLeft = 0;
   Timer? _tripTimer;
 
