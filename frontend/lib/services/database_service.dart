@@ -24,4 +24,6 @@ class DatabaseService extends ChangeNotifier {
   void notifyUIStateChange() {
     notifyListeners();
   }
+
+  // Emergency & Guardian Database
 }
