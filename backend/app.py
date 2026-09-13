@@ -10,3 +10,7 @@ def fetch_metrics():
 @app.route("/api/dashboard/stats", methods=["GET"])
 def get_dashboard_stats():
     return jsonify({"status": "success", "activeAlerts": 0, "protectedZones": 12})
+
+
+def parse_sos_payload(req):
+    return req.json or {}
