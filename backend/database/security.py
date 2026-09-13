@@ -224,6 +224,9 @@ def is_ip_rate_limited(ip_address: str) -> bool:
     return False
 
 
+# GPS security module
+def encrypt_gps_coordinates(lat, lng):
+    pass
 
 
 # =====================================================================
