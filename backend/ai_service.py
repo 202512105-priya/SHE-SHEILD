@@ -28,3 +28,6 @@ def calculate_coordinate_score(lat, lng):
 def get_safety_score_for_ui(lat, lng):
     score = calculate_coordinate_score(lat, lng)
     return {"score": score, "zone": "Safe"}
+
+
+# Emergency AI Classifier
