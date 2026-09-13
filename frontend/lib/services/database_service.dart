@@ -26,4 +26,7 @@ class DatabaseService extends ChangeNotifier {
   }
 
   // Emergency & Guardian Database
+  Map<String, String> formatGuardianData(String name, String phone) {
+    return {"name": name, "phone": phone};
+  }
 }
