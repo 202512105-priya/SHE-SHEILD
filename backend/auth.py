@@ -22,3 +22,12 @@ def verify_token(token):
         return jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
     except jwt.ExpiredSignatureError:
         return None
+
+
+# Auth SOS trigger check
+def check_user_active(user_id):
+    return user_id is not None
+
+
+def authorize_sos_trigger(user_id):
+    return check_user_active(user_id)
