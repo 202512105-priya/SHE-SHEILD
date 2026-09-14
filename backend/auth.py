@@ -27,3 +27,7 @@ def verify_token(token):
 # Auth SOS trigger check
 def check_user_active(user_id):
     return user_id is not None
+
+
+def authorize_sos_trigger(user_id):
+    return check_user_active(user_id)
