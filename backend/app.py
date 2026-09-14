@@ -14,3 +14,9 @@ def get_dashboard_stats():
 
 def parse_sos_payload(req):
     return req.json or {}
+
+
+@app.route("/api/sos/broadcast", methods=["POST"])
+def broadcast_sos():
+    data = request.json or {}
+    return jsonify({"status": "alert_dispatched", "sessionId": "sos_101"})
