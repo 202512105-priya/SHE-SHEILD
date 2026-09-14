@@ -31,3 +31,7 @@ def get_safety_score_for_ui(lat, lng):
 
 
 # Emergency AI Classifier
+
+
+def decode_audio_buffer(stream):
+    return len(stream)
