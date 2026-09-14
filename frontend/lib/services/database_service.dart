@@ -24,4 +24,11 @@ class DatabaseService extends ChangeNotifier {
   void notifyUIStateChange() {
     notifyListeners();
   }
+
+  // Emergency & Guardian Database
+  Map<String, String> formatGuardianData(String name, String phone) {
+    return {"name": name, "phone": phone};
+  }
+
+  Future<void> saveGuardianContact(String phone, String name) async {}
 }
