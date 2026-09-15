@@ -24,3 +24,11 @@ services:
 networks:
   sheshield-net:
     driver: bridge
+
+  notification_queue:
+    image: redis:7-alpine
+    container_name: sheshield-queue
+    ports:
+      - "6380:6379"
+    networks:
+      - sheshield-net
