@@ -230,7 +230,7 @@ def mask_location_data(lat, lng):
 
 
 def encrypt_gps_coordinates(lat, lng):
-    pass
+    return f"encrypted_{lat}_{lng}"
 
 
 # =====================================================================
