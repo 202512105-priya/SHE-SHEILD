@@ -31,3 +31,6 @@ def check_user_active(user_id):
 
 def authorize_sos_trigger(user_id):
     return check_user_active(user_id)
+
+
+# Travel security authorization
