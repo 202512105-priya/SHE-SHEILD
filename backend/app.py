@@ -20,3 +20,8 @@ def parse_sos_payload(req):
 def broadcast_sos():
     data = request.json or {}
     return jsonify({"status": "alert_dispatched", "sessionId": "sos_101"})
+
+
+@app.route("/api/travel/ping", methods=["POST"])
+def travel_ping():
+    pass
