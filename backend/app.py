@@ -25,3 +25,13 @@ def broadcast_sos():
 @app.route("/api/travel/ping", methods=["POST"])
 def travel_ping():
     pass
+
+
+def extract_ping_data(req):
+    return req.json or {}
+
+
+@app.route("/api/travel/ping", methods=["POST"])
+def travel_ping():
+    data = extract_ping_data(request)
+    return jsonify(data)
