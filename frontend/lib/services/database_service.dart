@@ -33,4 +33,5 @@ class DatabaseService extends ChangeNotifier {
   Future<void> saveGuardianContact(String phone, String name) async {}
 
   // Travel Waypoint Storage
+  Map<String, dynamic> formatWaypoint(double lat, double lng) => {"lat": lat, "lng": lng};
 }
