@@ -233,6 +233,12 @@ def encrypt_gps_coordinates(lat, lng):
     return f"encrypted_{lat}_{lng}"
 
 
+# Location privacy module
+def anonymize_old_location_history(user_id):
+    pass
+
+
+
 # =====================================================================
 # Unit Tests for Database Security Module
 # =====================================================================
