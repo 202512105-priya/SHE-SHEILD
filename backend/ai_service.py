@@ -39,3 +39,6 @@ def decode_audio_buffer(stream):
 
 def classify_emergency_audio(audio_stream):
     return {"threat_detected": True, "type": "scream_detection"}
+
+
+# Route deviation AI module
