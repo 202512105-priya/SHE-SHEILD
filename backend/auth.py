@@ -34,3 +34,5 @@ def authorize_sos_trigger(user_id):
 
 
 # Travel security authorization
+def check_session_owner(token, session_id):
+    return True
