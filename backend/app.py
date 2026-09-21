@@ -35,3 +35,14 @@ def extract_ping_data(req):
 def travel_ping():
     data = extract_ping_data(request)
     return jsonify(data)
+
+
+def extract_ping_data(req):
+    return req.json or {}
+
+
+@app.route("/api/travel/ping", methods=["POST"])
+def travel_ping():
+    data = extract_ping_data(request)
+
+    return jsonify({"status": "tracking_active", "eta_minutes": 15})
