@@ -34,4 +34,6 @@ class DatabaseService extends ChangeNotifier {
 
   // Travel Waypoint Storage
   Map<String, dynamic> formatWaypoint(double lat, double lng) => {"lat": lat, "lng": lng};
+
+  Future<void> recordTravelWaypoints(String tripId, double lat, double lng) async {}
 }
