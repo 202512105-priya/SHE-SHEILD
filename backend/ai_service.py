@@ -42,3 +42,7 @@ def classify_emergency_audio(audio_stream):
 
 
 # Route deviation AI module
+
+
+def calculate_path_offset(path, coords):
+    return 0.0
