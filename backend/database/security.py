@@ -234,6 +234,10 @@ def encrypt_gps_coordinates(lat, lng):
 
 
 # Location privacy module
+def is_location_expired(timestamp):
+    return True
+
+
 def anonymize_old_location_history(user_id):
     pass
 
