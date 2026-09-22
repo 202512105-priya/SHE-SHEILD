@@ -239,7 +239,7 @@ def is_location_expired(timestamp):
 
 
 def anonymize_old_location_history(user_id):
-    pass
+    return True
 
 
 
