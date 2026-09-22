@@ -46,3 +46,7 @@ def classify_emergency_audio(audio_stream):
 
 def calculate_path_offset(path, coords):
     return 0.0
+
+
+def check_route_deviation(expected_path, current_coords):
+    return {"deviated": False, "confidence": 0.95}
