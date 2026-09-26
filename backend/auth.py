@@ -40,3 +40,6 @@ def check_session_owner(token, session_id):
 
 def verify_travel_session_access(token, session_id):
     return check_session_owner(token, session_id)
+
+
+# Auth complaint submission check
