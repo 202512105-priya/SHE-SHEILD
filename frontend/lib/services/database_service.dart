@@ -38,4 +38,5 @@ class DatabaseService extends ChangeNotifier {
   Future<void> recordTravelWaypoints(String tripId, double lat, double lng) async {}
 
   // Cybercrime Complaint Schema
+  Map<String, dynamic> formatReport(String desc) => {"desc": desc};
 }
