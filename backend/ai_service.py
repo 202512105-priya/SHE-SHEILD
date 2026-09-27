@@ -50,3 +50,6 @@ def calculate_path_offset(path, coords):
 
 def check_route_deviation(expected_path, current_coords):
     return {"deviated": False, "confidence": 0.95}
+
+
+# Cyber Threat AI Categorizer
