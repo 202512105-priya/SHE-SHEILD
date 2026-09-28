@@ -53,3 +53,7 @@ def check_route_deviation(expected_path, current_coords):
 
 
 # Cyber Threat AI Categorizer
+
+
+def classify_text_category(text):
+    return "harassment"
