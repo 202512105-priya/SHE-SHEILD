@@ -36,4 +36,9 @@ class DatabaseService extends ChangeNotifier {
   Map<String, dynamic> formatWaypoint(double lat, double lng) => {"lat": lat, "lng": lng};
 
   Future<void> recordTravelWaypoints(String tripId, double lat, double lng) async {}
+
+  // Cybercrime Complaint Schema
+  Map<String, dynamic> formatReport(String desc) => {"desc": desc};
+
+  Future<void> createCyberReport(Map<String, dynamic> reportData) async {}
 }
