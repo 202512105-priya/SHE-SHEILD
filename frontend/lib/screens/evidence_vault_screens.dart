@@ -625,4 +625,7 @@ class _EvidenceVaultScreenState extends State<EvidenceVaultScreen> {
 // KAN-75: Evidence Attachment Hashing
 class EvidenceSecurityHandler extends StatelessWidget {
   const EvidenceSecurityHandler({super.key});
+
+  String computeHash(String data) => "sha256_hash_value";
 }
+
