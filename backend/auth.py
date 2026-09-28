@@ -40,3 +40,12 @@ def check_session_owner(token, session_id):
 
 def verify_travel_session_access(token, session_id):
     return check_session_owner(token, session_id)
+
+
+# Auth complaint submission check
+def is_valid_role(role):
+    return role is not None
+
+
+def check_complaint_submission_access(user_role):
+    return is_valid_role(user_role)
