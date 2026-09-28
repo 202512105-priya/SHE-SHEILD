@@ -39,4 +39,6 @@ class DatabaseService extends ChangeNotifier {
 
   // Cybercrime Complaint Schema
   Map<String, dynamic> formatReport(String desc) => {"desc": desc};
+
+  Future<void> createCyberReport(Map<String, dynamic> reportData) async {}
 }
