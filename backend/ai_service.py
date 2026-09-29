@@ -57,3 +57,7 @@ def check_route_deviation(expected_path, current_coords):
 
 def classify_text_category(text):
     return "harassment"
+
+
+def analyze_cyber_threat_text(description):
+    return {"category": "harassment", "severityLevel": "high"}
