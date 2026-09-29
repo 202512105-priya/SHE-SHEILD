@@ -627,5 +627,11 @@ class EvidenceSecurityHandler extends StatelessWidget {
   const EvidenceSecurityHandler({super.key});
 
   String computeHash(String data) => "sha256_hash_value";
+
+  @override
+  Widget build(BuildContext context) {
+    return const Text("Attachment Hash Verifier");
+  }
 }
+
 
