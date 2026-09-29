@@ -39,3 +39,11 @@ def health_check():
         "service": "api-gateway",
         "cloud_connected": True
     }), 200
+
+@gateway_app.route('/api/cyber/upload', methods=['POST'])
+def proxy_evidence_upload():
+    return jsonify({
+        "status": "received",
+        "service": "evidence-vault",
+        "encrypted": True
+    }), 200
