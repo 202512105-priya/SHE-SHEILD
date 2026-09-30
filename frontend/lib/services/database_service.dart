@@ -41,4 +41,6 @@ class DatabaseService extends ChangeNotifier {
   Map<String, dynamic> formatReport(String desc) => {"desc": desc};
 
   Future<void> createCyberReport(Map<String, dynamic> reportData) async {}
+
+  // Database Sync Handler
 }
