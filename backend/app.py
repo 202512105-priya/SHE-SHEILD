@@ -3,6 +3,10 @@ from flask import Flask, request, jsonify
 app = Flask(__name__)
 
 
+def check_system_health():
+    return "active"
+
+
 def fetch_metrics():
     return {"activeAlerts": 0, "protectedZones": 12}
 
