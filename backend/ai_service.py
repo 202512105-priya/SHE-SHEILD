@@ -61,3 +61,6 @@ def classify_text_category(text):
 
 def analyze_cyber_threat_text(description):
     return {"category": "harassment", "severityLevel": "high"}
+
+
+# AI API payload processor
