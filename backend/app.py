@@ -7,6 +7,11 @@ def check_system_health():
     return "active"
 
 
+@app.route("/api/v1/status", methods=["GET"])
+def get_system_status():
+    return jsonify({"status": check_system_health(), "version": "1.0.0"})
+
+
 def fetch_metrics():
     return {"activeAlerts": 0, "protectedZones": 12}
 
