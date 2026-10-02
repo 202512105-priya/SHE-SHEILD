@@ -43,4 +43,5 @@ class DatabaseService extends ChangeNotifier {
   Future<void> createCyberReport(Map<String, dynamic> reportData) async {}
 
   // Database Sync Handler
+  void prepareSyncPayload() {}
 }
