@@ -46,3 +46,13 @@ def travel_ping():
     data = extract_ping_data(request)
 
     return jsonify({"status": "tracking_active", "eta_minutes": 15})
+
+
+def extract_complaint_data(req):
+    return req.json or {}
+
+
+@app.route("/api/cyber/submit", methods=["POST"])
+def submit_cyber_complaint():
+    data = request.json or {}
+    return jsonify({"status": "submitted", "caseId": "case_cyber_101"})
