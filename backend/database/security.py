@@ -242,6 +242,12 @@ def anonymize_old_location_history(user_id):
     return True
 
 
+# API Header audit module
+def audit_security_headers(headers):
+    pass
+
+
+
 
 # =====================================================================
 # Unit Tests for Database Security Module
