@@ -62,4 +62,8 @@ The above content does NOT show the entire file contents. If you need to view an
 
 class ApiFlowStatusWidget extends StatelessWidget {
   const ApiFlowStatusWidget({super.key});
+
+  Widget buildStatusChip() {
+    return const Chip(label: Text("API Connection Live"));
+  }
 }
