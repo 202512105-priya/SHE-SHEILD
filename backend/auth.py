@@ -52,3 +52,5 @@ def check_complaint_submission_access(user_role):
 
 
 # Auth token middleware
+def wrap_handler(f, *args, **kwargs):
+    return f(*args, **kwargs)
