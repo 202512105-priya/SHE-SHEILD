@@ -243,6 +243,10 @@ def anonymize_old_location_history(user_id):
 
 
 # API Header audit module
+def check_headers_valid(headers):
+    return headers is not None
+
+
 def audit_security_headers(headers):
     pass
 
