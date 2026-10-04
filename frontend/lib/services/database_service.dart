@@ -44,4 +44,6 @@ class DatabaseService extends ChangeNotifier {
 
   // Database Sync Handler
   void prepareSyncPayload() {}
+
+  Future<void> syncRemoteDatabase() async {}
 }
