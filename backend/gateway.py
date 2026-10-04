@@ -47,3 +47,11 @@ def proxy_evidence_upload():
         "service": "evidence-vault",
         "encrypted": True
     }), 200
+
+@gateway_app.route('/api/v1/<path:subpath>', methods=['GET', 'POST', 'PUT', 'DELETE'])
+def proxy_v1_api(subpath):
+    return jsonify({
+        "gateway": "sheshield-proxy",
+        "route": f"/api/v1/{subpath}",
+        "status": "forwarded"
+    }), 200
