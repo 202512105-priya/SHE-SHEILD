@@ -68,3 +68,8 @@ def analyze_cyber_threat_text(description):
 
 def compute_risk_index(data):
     return 0.2
+
+
+def process_ai_payload(request_data):
+    risk = compute_risk_index(request_data)
+    return {"status": "analyzed", "risk_index": risk}
