@@ -66,4 +66,9 @@ class ApiFlowStatusWidget extends StatelessWidget {
   Widget buildStatusChip() {
     return const Chip(label: Text("API Connection Live"));
   }
+
+  @override
+  Widget build(BuildContext context) {
+    return const Chip(label: Text("API Connection Live"));
+  }
 }
