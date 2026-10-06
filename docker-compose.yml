@@ -43,3 +43,20 @@ networks:
     networks:
       - sheshield-net
     restart: unless-stopped
+
+  cloud_storage:
+    image: minio/minio:latest
+    container_name: sheshield-storage
+    ports:
+      - "9000:9000"
+    environment:
+      - MINIO_ROOT_USER=sheshield_admin
+      - MINIO_ROOT_PASSWORD=sheshield_secure_storage
+    volumes:
+      - storage_data:/data
+    command: server /data
+    networks:
+      - sheshield-net
+
+volumes:
+  storage_data:
