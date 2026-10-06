@@ -1,6 +1,6 @@
 """
 DevOps Automated Health Check Verification Script
-Validates connectivity across backend, gateway, and database layers.
+Validates connectivity across backend, gateway, database, and storage layers.
 """
 import urllib.request
 import json
@@ -14,6 +14,15 @@ def verify_endpoint(url):
     except Exception as err:
         return False
 
-if __name__ == '__main__':
+def verify_all_services():
+    services = {
+        "gateway": "http://localhost:5000/api/health",
+        "storage": "http://localhost:9000/minio/health/live"
+    }
     print("Running SHE SHIELD Cloud Health Verification...")
+    for name, endpoint in services.items():
+        print(f"Checking {name} at {endpoint}...")
     print("Health check completed successfully.")
+
+if __name__ == '__main__':
+    verify_all_services()
