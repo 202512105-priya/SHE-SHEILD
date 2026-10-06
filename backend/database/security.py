@@ -248,7 +248,7 @@ def check_headers_valid(headers):
 
 
 def audit_security_headers(headers):
-    pass
+    return check_headers_valid(headers)
 
 
 
