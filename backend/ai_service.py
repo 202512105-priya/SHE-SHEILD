@@ -73,3 +73,8 @@ def compute_risk_index(data):
 def process_ai_payload(request_data):
     risk = compute_risk_index(request_data)
     return {"status": "analyzed", "risk_index": risk}
+
+
+class SpatialThreatDetector:
+    def __init__(self):
+        self.model_version = "v1.4.0"
