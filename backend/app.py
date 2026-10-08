@@ -65,3 +65,8 @@ def extract_complaint_data(req):
 def submit_cyber_complaint():
     data = request.json or {}
     return jsonify({"status": "submitted", "caseId": "case_cyber_101"})
+
+
+@app.route("/api/ai/threat-assess", methods=["POST"])
+def assess_threat_route():
+    pass
