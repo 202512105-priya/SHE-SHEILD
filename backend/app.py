@@ -70,3 +70,12 @@ def submit_cyber_complaint():
 @app.route("/api/ai/threat-assess", methods=["POST"])
 def assess_threat_route():
     pass
+
+
+def extract_threat_payload(req):
+    data = req.json or {}
+    return {
+        "lat": data.get("latitude", 0.0),
+        "lng": data.get("longitude", 0.0),
+        "time": data.get("timestamp"),
+    }
