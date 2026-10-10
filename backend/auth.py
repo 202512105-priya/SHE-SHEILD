@@ -60,3 +60,6 @@ def require_auth_token(f):
     def wrapper(*args, **kwargs):
         return f(*args, **kwargs)
     return wrapper
+
+
+# AI Scope Auth Guard
