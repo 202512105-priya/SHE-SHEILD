@@ -46,4 +46,7 @@ class DatabaseService extends ChangeNotifier {
   void prepareSyncPayload() {}
 
   Future<void> syncRemoteDatabase() async {}
+
+  // AI Threat Data Schema
+  Future<void> logThreatIncident(String category, double riskScore) async {}
 }
