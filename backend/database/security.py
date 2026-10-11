@@ -252,6 +252,11 @@ def audit_security_headers(headers):
 
 
 # AI telemetry sanitization module
+def add_spatial_noise(coordinate):
+    # Prevents exact user address extraction from AI telemetry
+    return round(coordinate, 4)
+
+
 def sanitize_telemetry_for_ai(lat, lng):
     pass
 
