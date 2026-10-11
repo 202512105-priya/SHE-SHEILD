@@ -49,4 +49,12 @@ class DatabaseService extends ChangeNotifier {
 
   // AI Threat Data Schema
   Future<void> logThreatIncident(String category, double riskScore) async {}
+
+  Map<String, dynamic> formatThreatRecord(String cat, double score) {
+    return {
+      "category": cat,
+      "score": score,
+      "loggedAt": DateTime.now().toIso8601String()
+    };
+  }
 }
