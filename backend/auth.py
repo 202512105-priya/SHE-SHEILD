@@ -63,3 +63,5 @@ def require_auth_token(f):
 
 
 # AI Scope Auth Guard
+def check_ai_scope_permission(claims):
+    return "ai_read" in claims.get("scopes", ["ai_read"])
