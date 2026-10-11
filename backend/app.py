@@ -69,7 +69,16 @@ def submit_cyber_complaint():
 
 @app.route("/api/ai/threat-assess", methods=["POST"])
 def assess_threat_route():
-    pass
+    payload = extract_threat_payload(request)
+
+    return jsonify(
+        {
+            "status": "success",
+            "riskLevel": "ELEVATED",
+            "riskScore": 68,
+            "recommendedAction": "Maintain vigilance. Route alerts active.",
+        }
+    )
 
 
 def extract_threat_payload(req):
