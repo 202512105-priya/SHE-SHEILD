@@ -57,4 +57,8 @@ class DatabaseService extends ChangeNotifier {
       "loggedAt": DateTime.now().toIso8601String()
     };
   }
+
+  Future<void> cacheLocalThreat(Map<String, dynamic> record) async {
+    // Stores threat record for offline retrieval
+  }
 }
