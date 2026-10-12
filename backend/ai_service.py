@@ -82,3 +82,8 @@ class SpatialThreatDetector:
     def calculate_zone_risk(self, lat, lng):
         # Evaluates historical incident density and street illumination factors
         return 0.68
+
+    def evaluate_threat_alert(self, lat, lng):
+        score = self.calculate_zone_risk(lat, lng)
+        level = "HIGH" if score > 0.75 else "ELEVATED" if score > 0.5 else "LOW"
+        return {"riskScore": int(score * 100), "level": level}
