@@ -46,4 +46,19 @@ class DatabaseService extends ChangeNotifier {
   void prepareSyncPayload() {}
 
   Future<void> syncRemoteDatabase() async {}
+
+  // AI Threat Data Schema
+  Future<void> logThreatIncident(String category, double riskScore) async {}
+
+  Map<String, dynamic> formatThreatRecord(String cat, double score) {
+    return {
+      "category": cat,
+      "score": score,
+      "loggedAt": DateTime.now().toIso8601String()
+    };
+  }
+
+  Future<void> cacheLocalThreat(Map<String, dynamic> record) async {
+    // Stores threat record for offline retrieval
+  }
 }
