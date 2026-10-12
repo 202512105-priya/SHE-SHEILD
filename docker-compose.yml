@@ -60,3 +60,22 @@ networks:
 
 volumes:
   storage_data:
+
+  ai_service:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: python -c "from ai_service import ThreatDetector; print('AI threat detection service live')"
+    ports:
+      - "5001:5000"
+    environment:
+      - FLASK_ENV=production
+      - MODEL_CACHE_DIR=/models
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2048M
+    networks:
+      - sheshield-net
+    restart: unless-stopped
