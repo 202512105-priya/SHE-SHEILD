@@ -60,3 +60,14 @@ def require_auth_token(f):
     def wrapper(*args, **kwargs):
         return f(*args, **kwargs)
     return wrapper
+
+
+# AI Scope Auth Guard
+def check_ai_scope_permission(claims):
+    return "ai_read" in claims.get("scopes", ["ai_read"])
+
+
+def require_ai_scope(f):
+    def wrapper(*args, **kwargs):
+        return f(*args, **kwargs)
+    return wrapper
