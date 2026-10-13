@@ -258,7 +258,10 @@ def add_spatial_noise(coordinate):
 
 
 def sanitize_telemetry_for_ai(lat, lng):
-    pass
+    return {
+        "sanitizedLat": add_spatial_noise(lat),
+        "sanitizedLng": add_spatial_noise(lng)
+    }
 
 
 
