@@ -88,3 +88,9 @@ def extract_threat_payload(req):
         "lng": data.get("longitude", 0.0),
         "time": data.get("timestamp"),
     }
+
+
+# Admin Incident Retrieval Route
+@app.route("/api/admin/incidents", methods=["GET"])
+def get_admin_incidents():
+    pass
