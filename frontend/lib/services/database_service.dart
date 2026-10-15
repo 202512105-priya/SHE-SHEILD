@@ -61,4 +61,7 @@ class DatabaseService extends ChangeNotifier {
   Future<void> cacheLocalThreat(Map<String, dynamic> record) async {
     // Stores threat record for offline retrieval
   }
+
+  // Admin Queries & Aggregation Schema
+  Future<Map<String, int>> queryAdminDashboardStats() async => {};
 }
