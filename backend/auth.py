@@ -71,3 +71,6 @@ def require_ai_scope(f):
     def wrapper(*args, **kwargs):
         return f(*args, **kwargs)
     return wrapper
+
+
+# Admin RBAC Guard
