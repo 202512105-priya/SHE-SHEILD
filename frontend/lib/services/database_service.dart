@@ -64,4 +64,8 @@ class DatabaseService extends ChangeNotifier {
 
   // Admin Queries & Aggregation Schema
   Future<Map<String, int>> queryAdminDashboardStats() async => {};
+
+  Map<String, int> formatAggregateMetrics(int users, int cases, int alerts) {
+    return {"users": users, "cases": cases, "alerts": alerts};
+  }
 }
