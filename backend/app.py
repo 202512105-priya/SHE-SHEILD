@@ -94,3 +94,9 @@ def extract_threat_payload(req):
 @app.route("/api/admin/incidents", methods=["GET"])
 def get_admin_incidents():
     pass
+
+
+def parse_admin_query_filters(req):
+    status = req.args.get("status", "ALL")
+    limit = int(req.args.get("limit", 20))
+    return status, limit
