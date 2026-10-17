@@ -87,3 +87,8 @@ class SpatialThreatDetector:
         score = self.calculate_zone_risk(lat, lng)
         level = "HIGH" if score > 0.75 else "ELEVATED" if score > 0.5 else "LOW"
         return {"riskScore": int(score * 100), "level": level}
+
+
+class ThreatAnalyticsAggregator:
+    def __init__(self):
+        self.total_scans = 0
