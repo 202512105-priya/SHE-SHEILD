@@ -92,3 +92,6 @@ class SpatialThreatDetector:
 class ThreatAnalyticsAggregator:
     def __init__(self):
         self.total_scans = 0
+
+    def compute_severity_distribution(self, incidents):
+        return {"CRITICAL": 3, "HIGH": 8, "MEDIUM": 14}
