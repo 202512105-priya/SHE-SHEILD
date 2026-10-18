@@ -74,3 +74,5 @@ def require_ai_scope(f):
 
 
 # Admin RBAC Guard
+def verify_admin_claim(claims):
+    return claims.get("role") in ["ADMIN", "POLICE_RESPONDER"]
