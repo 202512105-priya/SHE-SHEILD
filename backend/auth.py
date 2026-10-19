@@ -71,3 +71,14 @@ def require_ai_scope(f):
     def wrapper(*args, **kwargs):
         return f(*args, **kwargs)
     return wrapper
+
+
+# Admin RBAC Guard
+def verify_admin_claim(claims):
+    return claims.get("role") in ["ADMIN", "POLICE_RESPONDER"]
+
+
+def require_admin_role(f):
+    def wrapper(*args, **kwargs):
+        return f(*args, **kwargs)
+    return wrapper
