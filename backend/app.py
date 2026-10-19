@@ -93,7 +93,21 @@ def extract_threat_payload(req):
 # Admin Incident Retrieval Route
 @app.route("/api/admin/incidents", methods=["GET"])
 def get_admin_incidents():
-    pass
+    status, limit = parse_admin_query_filters(request)
+
+    incidents = [
+        {"id": "INC-8091", "type": "SOS", "status": "DISPATCHED"},
+        {"id": "INC-8090", "type": "Travel Deviation", "status": "INVESTIGATING"},
+    ]
+
+    if status != "ALL":
+        incidents = [incident for incident in incidents if incident["status"] == status]
+
+    incidents = incidents[: max(0, min(limit, 100))]
+
+    return jsonify(
+        {"status": "success", "count": len(incidents), "incidents": incidents}
+    )
 
 
 def parse_admin_query_filters(req):
