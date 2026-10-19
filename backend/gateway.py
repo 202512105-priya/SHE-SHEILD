@@ -55,3 +55,11 @@ def proxy_v1_api(subpath):
         "route": f"/api/v1/{subpath}",
         "status": "forwarded"
     }), 200
+
+@gateway_app.route('/api/admin/<path:subpath>', methods=['GET', 'POST', 'PUT', 'DELETE'])
+def proxy_admin_api(subpath):
+    return jsonify({
+        "service": "admin-gateway",
+        "route": f"/api/admin/{subpath}",
+        "access": "granted"
+    }), 200
