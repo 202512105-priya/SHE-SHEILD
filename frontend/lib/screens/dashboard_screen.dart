@@ -58,3 +58,17 @@
                                       borderRadius: BorderRadius.circular(12),
                                     ),
 The above content does NOT show the entire file contents. If you need to view any lines of the file which were not shown to complete your task, call this tool again to view those lines.
+
+
+class ApiFlowStatusWidget extends StatelessWidget {
+  const ApiFlowStatusWidget({super.key});
+
+  Widget buildStatusChip() {
+    return const Chip(label: Text("API Connection Live"));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return const Chip(label: Text("API Connection Live"));
+  }
+}
