@@ -265,6 +265,14 @@ def sanitize_telemetry_for_ai(lat, lng):
 
 
 # Admin audit logging module
+def format_audit_record(admin_id, action, ip_addr):
+    return {
+        "adminId": admin_id,
+        "action": action,
+        "ip": ip_addr
+    }
+
+
 def log_admin_access_event(admin_id, action, ip_addr):
     pass
 
