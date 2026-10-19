@@ -68,4 +68,8 @@ class DatabaseService extends ChangeNotifier {
   Map<String, int> formatAggregateMetrics(int users, int cases, int alerts) {
     return {"users": users, "cases": cases, "alerts": alerts};
   }
+
+  Future<Map<String, int>> fetchDashboardMetrics() async {
+    return formatAggregateMetrics(1420, 289, 3);
+  }
 }
