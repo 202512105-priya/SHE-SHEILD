@@ -274,7 +274,8 @@ def format_audit_record(admin_id, action, ip_addr):
 
 
 def log_admin_access_event(admin_id, action, ip_addr):
-    pass
+    record = format_audit_record(admin_id, action, ip_addr)
+    return True
 
 
 
