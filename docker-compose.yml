@@ -79,3 +79,15 @@ volumes:
     networks:
       - sheshield-net
     restart: unless-stopped
+
+  admin_dashboard:
+    build:
+      context: ./admin_dashboard
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - sheshield-net
+    restart: unless-stopped
