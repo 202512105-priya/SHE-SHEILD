@@ -65,3 +65,26 @@ def extract_complaint_data(req):
 def submit_cyber_complaint():
     data = request.json or {}
     return jsonify({"status": "submitted", "caseId": "case_cyber_101"})
+
+
+@app.route("/api/ai/threat-assess", methods=["POST"])
+def assess_threat_route():
+    payload = extract_threat_payload(request)
+
+    return jsonify(
+        {
+            "status": "success",
+            "riskLevel": "ELEVATED",
+            "riskScore": 68,
+            "recommendedAction": "Maintain vigilance. Route alerts active.",
+        }
+    )
+
+
+def extract_threat_payload(req):
+    data = req.json or {}
+    return {
+        "lat": data.get("latitude", 0.0),
+        "lng": data.get("longitude", 0.0),
+        "time": data.get("timestamp"),
+    }
