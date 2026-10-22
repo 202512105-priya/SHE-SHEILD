@@ -1,0 +1,1 @@
+"{\n  \"firestore\": {\n    \"rules\": \"firestore.rules\"\n  },\n  \"emulators\": {\n    \"auth\": {\n      \"port\": 9099\n    },\n    \"firestore\": {\n      \"port\": 8080\n    },\n    \"storage\": {\n      \"port\": 9199\n    },\n    \"ui\": {\n      \"enabled\": true,\n      \"port\": 4000\n    },\n    \"singleProjectMode\": true\n  }\n}\n"
