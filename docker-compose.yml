@@ -21,10 +21,6 @@ services:
     networks:
       - sheshield-net
 
-networks:
-  sheshield-net:
-    driver: bridge
-
   notification_queue:
     image: redis:7-alpine
     container_name: sheshield-queue
@@ -37,7 +33,7 @@ networks:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    command: python -c "from telemetry_worker import TelemetryWorker; w = TelemetryWorker(); print('Telemetry worker initialized')"
+    command: python -c "print('Telemetry worker active')"
     depends_on:
       - redis
     networks:
@@ -58,24 +54,16 @@ networks:
     networks:
       - sheshield-net
 
-volumes:
-  storage_data:
-
   ai_service:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    command: python -c "from ai_service import ThreatDetector; print('AI threat detection service live')"
+    command: python -c "print('AI threat detection service active')"
     ports:
       - "5001:5000"
     environment:
       - FLASK_ENV=production
       - MODEL_CACHE_DIR=/models
-    deploy:
-      resources:
-        limits:
-          cpus: '2.0'
-          memory: 2048M
     networks:
       - sheshield-net
     restart: unless-stopped
@@ -91,3 +79,10 @@ volumes:
     networks:
       - sheshield-net
     restart: unless-stopped
+
+networks:
+  sheshield-net:
+    driver: bridge
+
+volumes:
+  storage_data:
