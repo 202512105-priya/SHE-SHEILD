@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # 🛡️ SHE SHIELD — Cyber-Integrated Safety Platform for Women
 
 [![Flutter](https://img.shields.io/badge/Flutter-3.x-02569B?logo=flutter&logoColor=white)](https://flutter.dev)
@@ -305,3 +306,7 @@ Dhirubhai Ambani University, Gandhinagar**
 
 This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.  
 *Disclaimer: SHE SHIELD is an academic engineering platform designed to demonstrate modern service-oriented architecture, emergency telemetry, and cryptographic evidence preservation. Integration hooks for civic frameworks (ERSS-112, CCTNS, CERT-In) are implemented in architecture mode for testing and evaluation.*
+=======
+# SHE SHIELD Safety Application
+Repository structure containing frontend, backend, and documentation.
+>>>>>>> origin/main

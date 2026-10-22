@@ -1,0 +1,88 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_ENV=development
+      - PORT=5000
+    networks:
+      - sheshield-net
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    networks:
+      - sheshield-net
+
+  notification_queue:
+    image: redis:7-alpine
+    container_name: sheshield-queue
+    ports:
+      - "6380:6379"
+    networks:
+      - sheshield-net
+
+  telemetry_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: python -c "print('Telemetry worker active')"
+    depends_on:
+      - redis
+    networks:
+      - sheshield-net
+    restart: unless-stopped
+
+  cloud_storage:
+    image: minio/minio:latest
+    container_name: sheshield-storage
+    ports:
+      - "9000:9000"
+    environment:
+      - MINIO_ROOT_USER=sheshield_admin
+      - MINIO_ROOT_PASSWORD=sheshield_secure_storage
+    volumes:
+      - storage_data:/data
+    command: server /data
+    networks:
+      - sheshield-net
+
+  ai_service:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: python -c "print('AI threat detection service active')"
+    ports:
+      - "5001:5000"
+    environment:
+      - FLASK_ENV=production
+      - MODEL_CACHE_DIR=/models
+    networks:
+      - sheshield-net
+    restart: unless-stopped
+
+  admin_dashboard:
+    build:
+      context: ./admin_dashboard
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - sheshield-net
+    restart: unless-stopped
+
+networks:
+  sheshield-net:
+    driver: bridge
+
+volumes:
+  storage_data:

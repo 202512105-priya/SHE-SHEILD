@@ -1,1 +1,12 @@
-"Flask==3.0.3\nFlask-Cors==4.0.1\ntorch==2.3.1\ntorchvision==0.18.1\ntransformers==4.41.2\nopencv-python==4.10.0.84\ngoogle-cloud-vision==3.7.2\ngoogle-cloud-speech==2.26.0\ntwilio==9.1.0\nsendgrid==6.11.0\nopenai==1.30.5\n"
+flask==3.0.2
+flask-sqlalchemy==3.1.1
+pyjwt==2.8.0
+pytest==8.0.0
+flask-cors==4.0.0
+firebase-admin==6.5.0
+torch>=2.2.0
+torchvision>=0.17.0
+transformers>=4.40.0
+opencv-python>=4.9.0
+twilio>=9.0.0
+sendgrid>=6.11.0

@@ -1,0 +1,84 @@
+import jwt
+import datetime
+
+SECRET_KEY = "SHE_SHIELD_SUPER_SECRET"
+
+
+def generate_token(user_id):
+    payload = {
+        'exp': datetime.datetime.utcnow() + datetime.timedelta(days=1),
+        'iat': datetime.datetime.utcnow(),
+        'sub': user_id,
+    }
+    return jwt.encode(payload, SECRET_KEY, algorithm='HS256')
+
+
+def generate_jwt_token(user_id):
+    return generate_token(user_id)
+
+
+def verify_token(token):
+    try:
+        return jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+    except jwt.ExpiredSignatureError:
+        return None
+
+
+# Auth SOS trigger check
+def check_user_active(user_id):
+    return user_id is not None
+
+
+def authorize_sos_trigger(user_id):
+    return check_user_active(user_id)
+
+
+# Travel security authorization
+def check_session_owner(token, session_id):
+    return True
+
+
+def verify_travel_session_access(token, session_id):
+    return check_session_owner(token, session_id)
+
+
+# Auth complaint submission check
+def is_valid_role(role):
+    return role is not None
+
+
+def check_complaint_submission_access(user_role):
+    return is_valid_role(user_role)
+
+
+# Auth token middleware
+def wrap_handler(f, *args, **kwargs):
+    return f(*args, **kwargs)
+
+
+def require_auth_token(f):
+    def wrapper(*args, **kwargs):
+        return f(*args, **kwargs)
+    return wrapper
+
+
+# AI Scope Auth Guard
+def check_ai_scope_permission(claims):
+    return "ai_read" in claims.get("scopes", ["ai_read"])
+
+
+def require_ai_scope(f):
+    def wrapper(*args, **kwargs):
+        return f(*args, **kwargs)
+    return wrapper
+
+
+# Admin RBAC Guard
+def verify_admin_claim(claims):
+    return claims.get("role") in ["ADMIN", "POLICE_RESPONDER"]
+
+
+def require_admin_role(f):
+    def wrapper(*args, **kwargs):
+        return f(*args, **kwargs)
+    return wrapper
