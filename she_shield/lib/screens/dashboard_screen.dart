@@ -528,14 +528,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       color: Colors.teal.shade700,
                       route: '/travel_monitor',
                       ticketId: "SHE-202",
-                      sprintName: "Sprint 2 (Current Sprint)",
+                      sprintName: "Sprint 1 / Live Feature",
                       description: "Countdown safety timeline with automated welfare check-ins and blackbox background audio/video recording.",
                       plannedFeatures: const [
                         "Safety Timeline Countdown Clock",
                         "Background Audio/Video Recording Modes",
                         "Automated Guardian Arrival Ping",
                       ],
-                      isBacklogItem: true,
+                      isBacklogItem: false, // Running & Live!
                     ),
                     _FeatureTile(
                       title: "Wearables Integration",
@@ -560,14 +560,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       color: Colors.pink.shade700,
                       route: '/cyber_report',
                       ticketId: "SHE-203",
-                      sprintName: "Sprint 2 (Current Sprint)",
+                      sprintName: "Sprint 1 / Live Feature",
                       description: "NLP threat evaluation engine for blackmail, cyberstalking, and instant cyber cell dossier generation.",
                       plannedFeatures: const [
                         "AI Threat Classification (Blackmail/Harassment)",
                         "Offender URL & Screenshot Ingestion",
                         "Direct National Cyber Crime Portal Link",
                       ],
-                      isBacklogItem: true,
+                      isBacklogItem: false, // Running & Live!
                     ),
                     _FeatureTile(
                       title: "Upload Evidence Vault",
@@ -757,7 +757,7 @@ class _FeatureTile extends StatelessWidget {
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Text(
-                        isBacklogItem ? ticketId : "SPRINT 1",
+                        isBacklogItem ? ticketId : "LIVE",
                         style: TextStyle(
                           fontSize: 9,
                           fontWeight: FontWeight.bold,
