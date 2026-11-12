@@ -30,7 +30,10 @@ from urllib.parse import parse_qs, urlencode, urlparse
 import urllib.request
 import uuid
 
-import bcrypt
+try:
+    import bcrypt
+except ImportError:
+    bcrypt = None
 
 PORT = 8080
 SERVER_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -146,17 +149,29 @@ def utc_now_iso():
 
 
 def hash_password(plain_password: str) -> str:
-    salt = bcrypt.gensalt(rounds=12)
-    return bcrypt.hashpw(plain_password.encode("utf-8"), salt).decode("utf-8")
+    if bcrypt:
+        salt = bcrypt.gensalt(rounds=12)
+        return bcrypt.hashpw(plain_password.encode("utf-8"), salt).decode("utf-8")
+    salt = secrets.token_hex(16)
+    h = hashlib.sha256((salt + plain_password).encode("utf-8")).hexdigest()
+    return f"sha256${salt}${h}"
 
 
 def verify_password(plain_password: str, password_hash: str) -> bool:
     if not plain_password or not password_hash:
         return False
-    try:
-        return bcrypt.checkpw(plain_password.encode("utf-8"), password_hash.encode("utf-8"))
-    except Exception:
-        return False
+    if bcrypt:
+        try:
+            return bcrypt.checkpw(plain_password.encode("utf-8"), password_hash.encode("utf-8"))
+        except Exception:
+            pass
+    if password_hash.startswith("sha256$"):
+        parts = password_hash.split("$")
+        if len(parts) == 3:
+            salt, expected = parts[1], parts[2]
+            computed = hashlib.sha256((salt + plain_password).encode("utf-8")).hexdigest()
+            return hmac.compare_digest(computed, expected)
+    return False
 
 
 def hash_token(raw_token: str) -> str:

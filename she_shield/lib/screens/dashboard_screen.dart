@@ -413,30 +413,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                         overflow: TextOverflow.ellipsis,
                       ),
-                      InkWell(
-                        onTap: () => showLocalServerConfigDialog(context, db),
-                        borderRadius: BorderRadius.circular(8),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 2),
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.fiber_manual_record,
-                                size: 8,
-                                color: db.isDatabaseLive ? Colors.greenAccent : Colors.amberAccent,
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 2),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.cloud_done,
+                              size: 11,
+                              color: Colors.greenAccent,
+                            ),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                "Vercel Cloud Database Active",
+                                style: const TextStyle(fontSize: 10, color: Colors.white70),
+                                overflow: TextOverflow.ellipsis,
                               ),
-                              const SizedBox(width: 4),
-                              Expanded(
-                                child: Text(
-                                  db.isDatabaseLive
-                                      ? "SQLite Live (${db.activeServerUrl.replaceFirst('http://', '')})"
-                                      : "Local Standby • Tap for Server IP",
-                                  style: const TextStyle(fontSize: 10, color: Colors.white70),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
                       ),
                     ],

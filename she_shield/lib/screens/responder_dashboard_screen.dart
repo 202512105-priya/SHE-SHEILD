@@ -144,36 +144,24 @@ class _ResponderDashboardScreenState extends State<ResponderDashboardScreen> wit
               );
             },
           ),
-          InkWell(
-            onTap: () => showLocalServerConfigDialog(context, db),
-            borderRadius: BorderRadius.circular(12),
-            child: Container(
-              margin: const EdgeInsets.only(right: 12),
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: db.isDatabaseLive
-                    ? Colors.greenAccent.withValues(alpha: 0.25)
-                    : Colors.redAccent.withValues(alpha: 0.3),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: db.isDatabaseLive ? Colors.greenAccent : Colors.redAccent,
+          Container(
+            margin: const EdgeInsets.only(right: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.greenAccent.withValues(alpha: 0.25),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.greenAccent),
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.cloud_done, color: Colors.greenAccent, size: 11),
+                SizedBox(width: 5),
+                Text(
+                  'VERCEL CLOUD LIVE',
+                  style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
                 ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.fiber_manual_record,
-                    color: db.isDatabaseLive ? Colors.greenAccent : Colors.redAccent,
-                    size: 9,
-                  ),
-                  const SizedBox(width: 5),
-                  Text(
-                    db.isDatabaseLive ? 'SQLITE LIVE (8080)' : 'LOCAL STANDBY',
-                    style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
-                  ),
-                ],
-              ),
+              ],
             ),
           ),
           IconButton(

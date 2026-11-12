@@ -77,42 +77,13 @@ class LocalDatabaseService {
 
   /// List of candidate server URLs to discover the local SQLite server
   List<String> get candidateUrls {
-    final list = <String>[];
-    final custom = _normalizeBaseUrl(customServerHost);
-
     if (kIsWeb) {
       final origin = Uri.base.origin;
-      final isHttpsRemote = Uri.base.scheme == 'https' &&
-          Uri.base.host != 'localhost' &&
-          Uri.base.host != '127.0.0.1';
-      // When hosted on Vercel / remote HTTPS, prioritize the same-origin backend!
-      if (isHttpsRemote && origin.isNotEmpty) {
-        list.add(origin);
-      }
-      if (custom.isNotEmpty && !list.contains(custom)) {
-        list.add(custom);
-      }
-      if (!isHttpsRemote) {
-        if (custom.isNotEmpty) {
-          return list;
-        }
-        final webHost = getWebOriginHost();
-        if (webHost != null && webHost.isNotEmpty) {
-          final localOrigin = 'http://$webHost:8080';
-          if (!list.contains(localOrigin)) {
-            list.add(localOrigin);
-          }
-        }
-        if (!list.contains('http://localhost:8080')) {
-          list.add('http://localhost:8080');
-        }
-        if (!list.contains('http://127.0.0.1:8080')) {
-          list.add('http://127.0.0.1:8080');
-        }
-      }
-      return list;
+      return origin.isNotEmpty ? [origin] : [''];
     }
 
+    final list = <String>[];
+    final custom = _normalizeBaseUrl(customServerHost);
     if (custom.isNotEmpty) {
       list.add(custom);
       return list;
@@ -159,6 +130,12 @@ class LocalDatabaseService {
   }
 
   Future<bool> connect({bool forceReprobe = false}) async {
+    if (kIsWeb) {
+      _activeServerUrl = Uri.base.origin;
+      _isConnected = true;
+      return true;
+    }
+
     if (!forceReprobe && _isConnected && _activeServerUrl.isNotEmpty) {
       return true;
     }
@@ -235,7 +212,7 @@ class LocalDatabaseService {
       return const ApiResult(
         success: false,
         statusCode: 0,
-        error: 'Unable to reach Local SQLite Server. Check connection settings.',
+        error: 'Unable to reach Vercel database server. Please check your network connection.',
       );
     }
     try {

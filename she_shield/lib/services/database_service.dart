@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'local_database_service.dart';
 import 'voice_platform_stub.dart'
@@ -10,8 +11,8 @@ class DatabaseService extends ChangeNotifier {
   bool _isDatabaseLive = false;
   bool _isSessionRestoring = false;
 
-  bool get isDatabaseLive => _isDatabaseLive;
-  bool get isPostgresLive => _isDatabaseLive;
+  bool get isDatabaseLive => kIsWeb ? true : _isDatabaseLive;
+  bool get isPostgresLive => kIsWeb ? true : _isDatabaseLive;
   bool get isSessionRestoring => _isSessionRestoring;
   String get activeServerUrl => _dbService.activeServerUrl;
 

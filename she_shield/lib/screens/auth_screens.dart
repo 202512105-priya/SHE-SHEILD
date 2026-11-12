@@ -161,55 +161,30 @@ class WelcomeScreen extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 12),
-                Consumer<DatabaseService>(
-                  builder: (context, db, _) {
-                    return Center(
-                      child: InkWell(
-                        onTap: () => showLocalServerConfigDialog(context, db),
-                        borderRadius: BorderRadius.circular(20),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: db.isDatabaseLive ? Colors.green.shade50 : Colors.orange.shade50,
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color: db.isDatabaseLive ? Colors.green.shade300 : Colors.orange.shade300,
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.dns,
-                                size: 14,
-                                color: db.isDatabaseLive ? Colors.green.shade700 : Colors.orange.shade800,
-                              ),
-                              const SizedBox(width: 6),
-                              Flexible(
-                                child: Text(
-                                  db.isDatabaseLive
-                                      ? "SQLite Live: ${db.activeServerUrl.replaceFirst('http://', '')}"
-                                      : "Local SQLite Standby (Tap to Connect)",
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                    color: db.isDatabaseLive ? Colors.green.shade800 : Colors.orange.shade900,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              const SizedBox(width: 4),
-                              Icon(
-                                Icons.settings,
-                                size: 13,
-                                color: db.isDatabaseLive ? Colors.green.shade700 : Colors.orange.shade800,
-                              ),
-                            ],
+                Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.green.shade50,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: Colors.green.shade300),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.cloud_done, size: 14, color: Colors.green.shade700),
+                        const SizedBox(width: 6),
+                        Text(
+                          "Vercel Cloud Database Active",
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.green.shade800,
                           ),
                         ),
-                      ),
-                    );
-                  },
+                      ],
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 24),
                 const Text(
@@ -437,16 +412,10 @@ class _LoginScreenState extends State<LoginScreen> {
         title: const Text("Sign In"),
         backgroundColor: Colors.purple.shade700,
         foregroundColor: Colors.white,
-        actions: [
-          Consumer<DatabaseService>(
-            builder: (ctx, db, _) => IconButton(
-              tooltip: 'Configure Local SQLite Server IP',
-              icon: Icon(
-                Icons.dns_outlined,
-                color: db.isDatabaseLive ? Colors.greenAccent : Colors.amberAccent,
-              ),
-              onPressed: () => showLocalServerConfigDialog(ctx, db),
-            ),
+        actions: const [
+          Padding(
+            padding: EdgeInsets.only(right: 16.0),
+            child: Icon(Icons.cloud_done, color: Colors.greenAccent, size: 20),
           ),
         ],
       ),
