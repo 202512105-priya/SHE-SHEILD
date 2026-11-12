@@ -61,7 +61,7 @@ class _RegisterResponderScreenState extends State<RegisterResponderScreen> {
     if (res.success) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Authorized Officer account created in SQLite!'),
+          content: Text('Authorized Officer account created in Cloud Database!'),
           backgroundColor: Colors.green,
         ),
       );

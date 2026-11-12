@@ -204,7 +204,7 @@ class WelcomeScreen extends StatelessWidget {
 
                 _RoleCard(
                   title: "New Account Registration",
-                  subtitle: "Register as a Safety User or Trusted Guardian in SQLite",
+                  subtitle: "Register as a Safety User or Trusted Guardian",
                   icon: Icons.person_add,
                   color: Colors.purple,
                   onTap: () => Navigator.pushNamed(context, '/register_user'),
@@ -439,7 +439,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      "Sign in with your SQLite-verified account. Your role dashboard is assigned automatically by the server.",
+                      "Sign in with your verified account. Your role dashboard is assigned automatically by the server.",
                       textAlign: TextAlign.center,
                       style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                     ),
@@ -647,7 +647,7 @@ class _RegisterUserScreenState extends State<RegisterUserScreen> {
           content: Text(
             _accountType == 'guardian'
                 ? "Guardian account created! Redirecting to Guardian Dashboard..."
-                : "Account registered & secured in SQLite! Welcome to SHE SHIELD.",
+                : "Account registered & secured in Cloud Database! Welcome to SHE SHIELD.",
           ),
           backgroundColor: Colors.green,
         ),

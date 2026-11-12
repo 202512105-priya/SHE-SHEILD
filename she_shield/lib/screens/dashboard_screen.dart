@@ -203,7 +203,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text("SQLite Persistence:", style: TextStyle(color: Colors.white70, fontSize: 12)),
+                      const Text("Cloud Database Persistence:", style: TextStyle(color: Colors.white70, fontSize: 12)),
                       Text(
                         db.isDatabaseLive ? "Synced Live" : "Local Standby",
                         style: TextStyle(color: db.isDatabaseLive ? Colors.greenAccent : Colors.orangeAccent, fontWeight: FontWeight.bold, fontSize: 12),
@@ -338,7 +338,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         Navigator.pop(ctx);
                         if (mounted) {
                           ScaffoldMessenger.of(this.context).showSnackBar(
-                            const SnackBar(content: Text('Safety Profile updated in SQLite!'), backgroundColor: Colors.green),
+                            const SnackBar(content: Text('Safety Profile updated in Cloud Database!'), backgroundColor: Colors.green),
                           );
                         }
                       } else {

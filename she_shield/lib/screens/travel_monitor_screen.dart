@@ -281,7 +281,7 @@ class _TravelMonitorScreenState extends State<TravelMonitorScreen> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Creates an unguessable expiring tracking link stored in SQLite.',
+                    'Creates an unguessable expiring tracking link stored in Cloud Database.',
                     style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                   ),
                   const SizedBox(height: 12),
@@ -560,7 +560,7 @@ class _TravelMonitorScreenState extends State<TravelMonitorScreen> {
                 ),
               ),
               child: Text(
-                notif['deliveryMessage']?.toString() ?? 'Emergency alert saved in SQLite.',
+                notif['deliveryMessage']?.toString() ?? 'Emergency alert saved in Cloud Database.',
                 style: const TextStyle(fontSize: 12),
               ),
             ),
@@ -600,7 +600,7 @@ class _TravelMonitorScreenState extends State<TravelMonitorScreen> {
         ),
         content: Text(
           'Current GPS distance to ${_journeyService.displayDestName} is $rem.\n\n'
-          'Confirming will stop live GPS tracking, stop active evidence recording, and mark your journey COMPLETED in SQLite.',
+          'Confirming will stop live GPS tracking, stop active evidence recording, and mark your journey COMPLETED in Cloud Database.',
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Stay Active')),
@@ -640,7 +640,7 @@ class _TravelMonitorScreenState extends State<TravelMonitorScreen> {
             if (_journeyService.history.isEmpty)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 20),
-                child: Text('No recorded journeys yet in SQLite.'),
+                child: Text('No recorded journeys yet in Cloud Database.'),
               )
             else
               Flexible(
@@ -844,7 +844,7 @@ class _TravelMonitorScreenState extends State<TravelMonitorScreen> {
                 const SizedBox(width: 8),
                 const Expanded(
                   child: Text(
-                    'Safe Arrival Recorded in SQLite',
+                    'Safe Arrival Recorded in Cloud Database',
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
                   ),
                 ),
@@ -1508,7 +1508,7 @@ class _TravelMonitorScreenState extends State<TravelMonitorScreen> {
         ? 'Offline queue: ${svc.pendingOfflineCount} GPS pt(s)'
         : (svc.lastSyncSuccessAt != null
             ? 'Synced ${svc.lastSyncSuccessAt!.toLocal().hour.toString().padLeft(2, '0')}:${svc.lastSyncSuccessAt!.toLocal().minute.toString().padLeft(2, '0')}:${svc.lastSyncSuccessAt!.toLocal().second.toString().padLeft(2, '0')}'
-            : (svc.hasActiveJourney ? 'Initializing SQLite sync...' : 'Ready to start'));
+            : (svc.hasActiveJourney ? 'Initializing Cloud Database sync...' : 'Ready to start'));
 
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),

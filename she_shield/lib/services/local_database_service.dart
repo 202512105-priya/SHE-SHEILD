@@ -249,7 +249,7 @@ class LocalDatabaseService {
       return ApiResult(
         success: false,
         statusCode: 0,
-        error: 'Network error communicating with Local SQLite Server.',
+        error: 'Network error communicating with Cloud Database.',
       );
     }
   }
@@ -709,7 +709,7 @@ class LocalDatabaseService {
       return const ApiResult(
         success: false,
         statusCode: 0,
-        error: 'Offline: Local SQLite Server unreachable.',
+        error: 'Offline: Cloud Database unreachable.',
       );
     }
     try {

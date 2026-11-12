@@ -385,7 +385,7 @@ class _SosProtectionCenterScreenState extends State<SosProtectionCenterScreen> {
                             border: const OutlineInputBorder(),
                             suffixIcon: IconButton(
                               icon: const Icon(Icons.save),
-                              tooltip: "Save Phrase to SQLite",
+                              tooltip: "Save Phrase to Cloud Database",
                               onPressed: () async {
                                 final phrase = _voicePhraseController.text.trim();
                                 final res = await db.saveVoiceSosSettings(voicePhrase: phrase);
@@ -394,7 +394,7 @@ class _SosProtectionCenterScreenState extends State<SosProtectionCenterScreen> {
                                   SnackBar(
                                     content: Text(
                                       res.success
-                                          ? "Voice SOS Phrase saved to SQLite!"
+                                          ? "Voice SOS Phrase saved to Cloud Database!"
                                           : (res.error ?? "Failed to save voice phrase."),
                                     ),
                                     backgroundColor: res.success ? Colors.green : Colors.red,

@@ -129,7 +129,7 @@ class _ResponderDashboardScreenState extends State<ResponderDashboardScreen> wit
         actions: [
           IconButton(
             icon: const Icon(Icons.sync, color: Colors.white, size: 20),
-            tooltip: 'Sync Live Cases from Local SQLite Server',
+            tooltip: 'Sync Live Cases from Cloud Database',
             onPressed: () async {
               final ok = await db.syncFromDatabase();
               if (!context.mounted) return;
@@ -138,7 +138,7 @@ class _ResponderDashboardScreenState extends State<ResponderDashboardScreen> wit
                   content: Text(
                     ok
                         ? 'Synced live cases from ${db.activeServerUrl}'
-                        : 'Local SQLite server unreachable. Tap status badge to configure host IP.',
+                        : 'Cloud Database unreachable. Check network connection.',
                   ),
                 ),
               );
@@ -608,7 +608,7 @@ class _ResponderDashboardScreenState extends State<ResponderDashboardScreen> wit
                           // 4. Case Status Synchronization Chips
                           _buildSectionHeader('Case Status Synchronization', Icons.sync),
                           const Text(
-                            'Tap a status button to synchronize incident lifecycle to Local SQLite Server:',
+                            'Tap a status button to synchronize incident lifecycle to Cloud Database:',
                             style: TextStyle(fontSize: 12, color: Colors.grey),
                           ),
                           const SizedBox(height: 8),
@@ -646,7 +646,7 @@ class _ResponderDashboardScreenState extends State<ResponderDashboardScreen> wit
                                         .updateCyberComplaintStatus(caseId, status);
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       SnackBar(
-                                        content: Text('Cyber Case $caseId status updated to $status (Synced to Local SQLite Server)'),
+                                        content: Text('Cyber Case $caseId status updated to $status (Synced to Cloud Database)'),
                                         duration: const Duration(seconds: 2),
                                       ),
                                     );
@@ -1016,7 +1016,7 @@ class _ResponderDashboardScreenState extends State<ResponderDashboardScreen> wit
                                         .updateCaseStatus(caseId, status);
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       SnackBar(
-                                        content: Text('Case $caseId status updated to $status (Synced to Local SQLite Server)'),
+                                        content: Text('Case $caseId status updated to $status (Synced to Cloud Database)'),
                                         duration: const Duration(seconds: 2),
                                       ),
                                     );

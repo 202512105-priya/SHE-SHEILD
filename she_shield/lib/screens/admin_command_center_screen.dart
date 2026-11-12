@@ -280,7 +280,7 @@ class _AdminCommandCenterScreenState extends State<AdminCommandCenterScreen>
                         Navigator.pop(ctx);
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                            content: Text('Officer ${nameCtrl.text.trim()} provisioned in SQLite!'),
+                            content: Text('Officer ${nameCtrl.text.trim()} provisioned in Cloud Database!'),
                             backgroundColor: Colors.green,
                           ),
                         );

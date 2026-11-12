@@ -35,6 +35,11 @@ try:
 except ImportError:
     bcrypt = None
 
+try:
+    import db_adapter
+except ImportError:
+    from . import db_adapter
+
 PORT = 8080
 SERVER_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_FILE = os.environ.get("SHESHIELD_DB_PATH") or os.path.join(SERVER_DIR, "she_shield.db")
@@ -635,10 +640,7 @@ def deliver_guardian_notifications(recipients, subject: str, body_text: str):
 
 
 def get_db():
-    conn = sqlite3.connect(DB_FILE, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON;")
-    return conn
+    return db_adapter.get_db(DB_FILE)
 
 
 def log_audit(c, actor_user_id, action, target_id=None, details=None):
@@ -663,9 +665,17 @@ def map_legacy_role_to_role_id(legacy_role: str) -> str:
 
 
 def _ensure_column(c, table: str, column: str, definition: str):
-    existing = {row[1] for row in c.execute(f"PRAGMA table_info({table});").fetchall()}
-    if column not in existing:
-        c.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition};")
+    if getattr(c.connection, "is_postgres", False):
+        c.execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = %s AND column_name = %s;",
+            (table.lower(), column.lower()),
+        )
+        if not c.fetchone():
+            c.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition};")
+    else:
+        existing = {row[1] for row in c.execute(f"PRAGMA table_info({table});").fetchall()}
+        if column not in existing:
+            c.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition};")
 
 
 def init_db():
@@ -836,18 +846,32 @@ def init_db():
     )
     c.execute("CREATE INDEX IF NOT EXISTS idx_sessions_user ON authentication_sessions(user_id);")
 
-    c.execute(
-        """
-        CREATE TABLE IF NOT EXISTS audit_logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            actor_user_id TEXT,
-            action TEXT NOT NULL,
-            target_id TEXT,
-            details TEXT,
-            created_at TEXT NOT NULL
-        );
-        """
-    )
+    if getattr(conn, "is_postgres", False):
+        c.execute(
+            """
+            CREATE TABLE IF NOT EXISTS audit_logs (
+                id SERIAL PRIMARY KEY,
+                actor_user_id TEXT,
+                action TEXT NOT NULL,
+                target_id TEXT,
+                details TEXT,
+                created_at TEXT NOT NULL
+            );
+            """
+        )
+    else:
+        c.execute(
+            """
+            CREATE TABLE IF NOT EXISTS audit_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                actor_user_id TEXT,
+                action TEXT NOT NULL,
+                target_id TEXT,
+                details TEXT,
+                created_at TEXT NOT NULL
+            );
+            """
+        )
 
     # 4. Domain tables (preserving existing schema & adding owner scoping columns cleanly)
     c.execute(
@@ -1208,9 +1232,58 @@ def init_db():
         )
         print(f"[Bootstrap] Created initial Admin user admin@sheshield.local (set password via server/create_admin.py)")
 
+    if getattr(conn, "is_postgres", False):
+        user_cnt = c.execute("SELECT COUNT(*) FROM users;").fetchone()[0]
+        if user_cnt == 0:
+            print("[PostgreSQL Init] Users table is empty. Running automatic migration from seed SQLite database...")
+            candidate_paths = [
+                DB_FILE,
+                os.path.join(SERVER_DIR, "she_shield.db"),
+                os.path.join(os.path.dirname(SERVER_DIR), "server", "she_shield.db"),
+                os.path.join(os.getcwd(), "she_shield", "server", "she_shield.db"),
+                os.path.join(os.getcwd(), "api", "she_shield.db"),
+            ]
+            src_db = None
+            for p in candidate_paths:
+                if p and os.path.isfile(p):
+                    src_db = p
+                    break
+            if src_db:
+                try:
+                    s_conn = sqlite3.connect(src_db)
+                    s_conn.row_factory = sqlite3.Row
+                    s_cur = s_conn.cursor()
+                    tables_order = [
+                        "roles", "permissions", "role_permissions", "users", "authentication_sessions",
+                        "audit_logs", "sos_cases", "cyber_complaints", "vault_assets", "guardians",
+                        "cab_trips", "audio_evidence", "travel_journeys", "journey_locations",
+                        "journey_sharing", "journey_events", "guardian_connections", "guardian_invitations",
+                        "guardian_notifications"
+                    ]
+                    for tbl in tables_order:
+                        try:
+                            s_cur.execute(f"SELECT * FROM {tbl};")
+                            s_rows = s_cur.fetchall()
+                            if s_rows:
+                                col_names = [d[0] for d in s_cur.description]
+                                col_str = ", ".join(col_names)
+                                ph_str = ", ".join("%s" for _ in col_names)
+                                ins_sql = f"INSERT INTO {tbl} ({col_str}) VALUES ({ph_str}) ON CONFLICT DO NOTHING;"
+                                batch = [tuple(r[col] for col in col_names) for r in s_rows]
+                                c.executemany(ins_sql, batch)
+                                conn.commit()
+                                print(f"[PostgreSQL Init] Auto-migrated {len(batch)} records into {tbl}")
+                        except Exception as m_err:
+                            print(f"[PostgreSQL Init] Notice migrating {tbl}: {m_err}")
+                    s_conn.close()
+                except Exception as auto_m_err:
+                    print(f"[PostgreSQL Init] Auto-migration exception: {auto_m_err}")
+
     conn.commit()
+    is_pg = getattr(conn, "is_postgres", False)
     conn.close()
-    print(f"[SQLite] Database initialized & RBAC ready at {DB_FILE}")
+    db_type = "Neon PostgreSQL" if is_pg else f"SQLite 3 at {DB_FILE}"
+    print(f"[Database] Initialized & RBAC ready ({db_type})")
 
 
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
@@ -2189,11 +2262,15 @@ class SQLiteAPIHandler(BaseHTTPRequestHandler):
                 complaints_count = c.execute("SELECT COUNT(*) FROM cyber_complaints;").fetchone()[0]
                 vault_count = c.execute("SELECT COUNT(*) FROM vault_assets;").fetchone()[0]
                 users_count = c.execute("SELECT COUNT(*) FROM users;").fetchone()[0]
+                is_pg = getattr(conn, "is_postgres", False)
+                driver_name = getattr(conn, "driver_name", "sqlite3")
                 self._send_json(
                     {
                         "status": "ok",
-                        "server": "SHE SHIELD Local SQLite Server",
-                        "database": "SQLite 3",
+                        "server": "SHE SHIELD Cloud Database Server",
+                        "database": "PostgreSQL (Neon)" if is_pg else "SQLite 3",
+                        "isPostgres": is_pg,
+                        "driver": driver_name,
                         "port": PORT,
                         "records": {
                             "sos_cases": cases_count,

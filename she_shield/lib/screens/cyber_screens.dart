@@ -894,7 +894,7 @@ class _ComplaintStatusScreenState extends State<ComplaintStatusScreen> {
             onPressed: () {
               db.syncFromDatabase();
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text("Refreshed complaint status from Local SQLite Server.")),
+                const SnackBar(content: Text("Refreshed complaint status from Cloud Database.")),
               );
             },
           ),
