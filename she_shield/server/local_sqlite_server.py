@@ -34,8 +34,8 @@ import bcrypt
 
 PORT = 8080
 SERVER_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_FILE = os.path.join(SERVER_DIR, "she_shield.db")
-AUDIO_VAULT_DIR = os.path.join(SERVER_DIR, "secure_audio_vault")
+DB_FILE = os.environ.get("SHESHIELD_DB_PATH") or os.path.join(SERVER_DIR, "she_shield.db")
+AUDIO_VAULT_DIR = os.environ.get("SHESHIELD_VAULT_PATH") or os.path.join(SERVER_DIR, "secure_audio_vault")
 SESSION_TTL_HOURS = 24
 MAX_AUDIO_BYTES = 25 * 1024 * 1024  # 25 MB limit
 PHRASE_HMAC_KEY = os.environ.get("SHESHIELD_PHRASE_HMAC_KEY", "she_shield_voice_hmac_internal_v1").encode("utf-8")
@@ -1203,6 +1203,18 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
 
 
 class SQLiteAPIHandler(BaseHTTPRequestHandler):
+    def _resolve_path(self):
+        parsed = urlparse(self.path)
+        q = parse_qs(parsed.query)
+        p = parsed.path.rstrip("/")
+        if "__path" in q and q["__path"]:
+            p = q["__path"][0].rstrip("/")
+        elif self.headers.get("x-matched-path"):
+            p = self.headers.get("x-matched-path").rstrip("/")
+        elif self.headers.get("x-vercel-matched-path"):
+            p = self.headers.get("x-vercel-matched-path").rstrip("/")
+        return p, q
+
     def _send_cors(self):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
@@ -2135,8 +2147,7 @@ class SQLiteAPIHandler(BaseHTTPRequestHandler):
         }
 
     def do_DELETE(self):
-        parsed = urlparse(self.path)
-        path = parsed.path.rstrip("/")
+        path, _ = self._resolve_path()
         conn = get_db()
         c = conn.cursor()
         try:
@@ -2151,9 +2162,7 @@ class SQLiteAPIHandler(BaseHTTPRequestHandler):
             conn.close()
 
     def do_GET(self):
-        parsed = urlparse(self.path)
-        path = parsed.path.rstrip("/")
-        query = parse_qs(parsed.query)
+        path, query = self._resolve_path()
 
         conn = get_db()
         c = conn.cursor()
@@ -2784,8 +2793,7 @@ class SQLiteAPIHandler(BaseHTTPRequestHandler):
             conn.close()
 
     def do_POST(self):
-        parsed = urlparse(self.path)
-        path = parsed.path.rstrip("/")
+        path, _ = self._resolve_path()
 
         conn = get_db()
         c = conn.cursor()
