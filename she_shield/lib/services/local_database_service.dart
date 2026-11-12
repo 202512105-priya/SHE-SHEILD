@@ -85,15 +85,28 @@ class LocalDatabaseService {
     }
 
     if (kIsWeb) {
-      final webHost = getWebOriginHost();
-      if (webHost != null && webHost.isNotEmpty) {
-        list.add('http://$webHost:8080');
+      final origin = Uri.base.origin;
+      final isHttpsRemote = Uri.base.scheme == 'https' &&
+          Uri.base.host != 'localhost' &&
+          Uri.base.host != '127.0.0.1';
+      if ((Uri.base.scheme == 'http' || Uri.base.scheme == 'https') &&
+          origin.isNotEmpty) {
+        list.add(origin);
       }
-      if (!list.contains('http://localhost:8080')) {
-        list.add('http://localhost:8080');
-      }
-      if (!list.contains('http://127.0.0.1:8080')) {
-        list.add('http://127.0.0.1:8080');
+      if (!isHttpsRemote) {
+        final webHost = getWebOriginHost();
+        if (webHost != null && webHost.isNotEmpty) {
+          final localOrigin = 'http://$webHost:8080';
+          if (!list.contains(localOrigin)) {
+            list.add(localOrigin);
+          }
+        }
+        if (!list.contains('http://localhost:8080')) {
+          list.add('http://localhost:8080');
+        }
+        if (!list.contains('http://127.0.0.1:8080')) {
+          list.add('http://127.0.0.1:8080');
+        }
       }
       return list;
     }
@@ -122,7 +135,7 @@ class LocalDatabaseService {
       final res = await platformHttpRequest(
         method: 'GET',
         url: '$baseUrl/health',
-        timeout: const Duration(milliseconds: 1800),
+        timeout: const Duration(milliseconds: 6500),
       );
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
