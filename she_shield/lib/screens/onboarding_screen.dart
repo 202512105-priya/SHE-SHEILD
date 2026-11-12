@@ -128,16 +128,30 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     ),
   ];
 
+  bool _autoRedirectScheduled = false;
+
   void _finishOnboarding() async {
     final db = Provider.of<DatabaseService>(context, listen: false);
     db.completeOnboarding();
     if (mounted) {
-      Navigator.pushReplacementNamed(context, '/welcome');
+      Navigator.pushReplacementNamed(
+        context,
+        db.isAuthenticated ? db.homeRouteForRole : '/welcome',
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final db = Provider.of<DatabaseService>(context);
+    if (!_autoRedirectScheduled && !db.isSessionRestoring && db.isAuthenticated) {
+      _autoRedirectScheduled = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          Navigator.pushReplacementNamed(context, db.homeRouteForRole);
+        }
+      });
+    }
     return Scaffold(
       body: Container(
         decoration: BoxDecoration(

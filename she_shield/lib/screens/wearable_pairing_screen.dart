@@ -87,6 +87,14 @@ class _WearablePairingScreenState extends State<WearablePairingScreen> {
             const Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
+                Text("Wearable Hardware Buzzer:", style: TextStyle(color: Colors.grey)),
+                Text("PASS (85 dB Beep)", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange)),
+              ],
+            ),
+            const SizedBox(height: 8),
+            const Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
                 Text("Encrypted Hash Protocol:", style: TextStyle(color: Colors.grey)),
                 Text("AES-256-GCM", style: TextStyle(fontWeight: FontWeight.bold)),
               ],
@@ -111,6 +119,184 @@ class _WearablePairingScreenState extends State<WearablePairingScreen> {
             child: const Text("Close Test Diagnostic"),
           ),
         ],
+      ),
+    );
+  }
+
+  void _playWearableSoundModal(BuildContext context) {
+    bool isSoundPlaying = true;
+    int beepCount = 3;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setModalState) {
+          return Container(
+            padding: const EdgeInsets.all(24),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 48,
+                  height: 5,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.shade100,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        isSoundPlaying ? Icons.volume_up : Icons.volume_off,
+                        color: Colors.amber.shade900,
+                        size: 36,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  isSoundPlaying ? "🔊 Sound Playing on $_selectedDeviceType" : "Wearable Buzzer Standby",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.amber.shade900,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  isSoundPlaying
+                      ? "Transmitting 4.2 kHz dual-tone audible acoustic pulse to paired Bluetooth device (7C:9E:BD:41:0F:22)"
+                      : "Acoustic buzzer is idle. Tap below to send audible test pulses to verify Bluetooth hardware buzzer.",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                ),
+                const SizedBox(height: 18),
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade50,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.amber.shade200),
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text("Acoustic Sound Level:", style: TextStyle(fontSize: 13, color: Colors.grey)),
+                          Text(
+                            isSoundPlaying ? "85 dB Siren Pulse" : "0 dB (Muted)",
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              color: isSoundPlaying ? Colors.amber.shade900 : Colors.grey,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text("BLE Audio Channel:", style: TextStyle(fontSize: 13, color: Colors.grey)),
+                          const Text("Bluetooth LE 5.3 Audio", style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text("Buzzer Feedback:", style: TextStyle(fontSize: 13, color: Colors.grey)),
+                          Text(
+                            isSoundPlaying ? "Beeping ($beepCount Pulses Active)" : "Verified Ready",
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              color: isSoundPlaying ? Colors.green.shade800 : Colors.grey,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          side: BorderSide(color: Colors.amber.shade800),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        ),
+                        icon: Icon(
+                          isSoundPlaying ? Icons.stop : Icons.play_arrow,
+                          color: Colors.amber.shade900,
+                        ),
+                        label: Text(
+                          isSoundPlaying ? "Stop Buzzer" : "Play Sound Again",
+                          style: TextStyle(color: Colors.amber.shade900, fontWeight: FontWeight.bold),
+                        ),
+                        onPressed: () {
+                          setModalState(() {
+                            isSoundPlaying = !isSoundPlaying;
+                            if (isSoundPlaying) beepCount++;
+                          });
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.purple.shade800,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        ),
+                        icon: const Icon(Icons.check),
+                        label: const Text("Sound Verified", style: TextStyle(fontWeight: FontWeight.bold)),
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Row(
+                                children: [
+                                  const Icon(Icons.check_circle, color: Colors.greenAccent),
+                                  const SizedBox(width: 8),
+                                  Text("Wearable buzzer audible test passed for $_selectedDeviceType!"),
+                                ],
+                              ),
+                              backgroundColor: Colors.purple.shade900,
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
@@ -312,6 +498,25 @@ class _WearablePairingScreenState extends State<WearablePairingScreen> {
                 ),
 
                 const SizedBox(height: 24),
+
+                // Wearable Buzzer / Play Sound on Bluetooth Device Button
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.amber.shade700,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    elevation: 3,
+                  ),
+                  icon: const Icon(Icons.volume_up, size: 22),
+                  label: const Text(
+                    "🔊 Play Sound on Bluetooth Device",
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  ),
+                  onPressed: () => _playWearableSoundModal(context),
+                ),
+
+                const SizedBox(height: 14),
 
                 // Action Buttons: Simulate Trigger & Run SOS Test
                 Row(

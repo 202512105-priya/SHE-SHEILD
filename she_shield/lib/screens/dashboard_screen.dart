@@ -2,7 +2,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/database_service.dart';
-import '../widgets/jira_backlog_dialog.dart';
+import '../services/voice_engine_service.dart';
+import '../widgets/audio_evidence_section.dart';
+import '../widgets/server_config_dialog.dart';
+import '../services/geo_platform_stub.dart'
+    if (dart.library.io) '../services/geo_platform_io.dart'
+    if (dart.library.js_interop) '../services/geo_platform_web.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -15,6 +20,79 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Timer? _sosTimer;
   int _countdown = 5;
   bool _isHoldingSos = false;
+  bool _micPromptShown = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _promptMicrophoneIfNeeded();
+    });
+  }
+
+  Future<void> _promptMicrophoneIfNeeded() async {
+    if (!mounted || _micPromptShown) return;
+    final db = Provider.of<DatabaseService>(context, listen: false);
+    if (!db.isAuthenticated || !db.hasPermission('voice_sos:own')) return;
+
+    final engine = VoiceEngineService();
+    final alreadyGranted = await engine.checkMicPermission();
+    if (!mounted || alreadyGranted || _micPromptShown) return;
+
+    _micPromptShown = true;
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Icon(Icons.mic, color: Colors.purple.shade800),
+            const SizedBox(width: 8),
+            const Expanded(
+              child: Text(
+                'Allow Microphone for Voice SOS?',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: const Text(
+          'SHE SHIELD needs microphone permission to detect your custom Voice SOS phrase and automatically record audio evidence into your encrypted vault when triggered.',
+          style: TextStyle(fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Not Now'),
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.purple.shade800,
+              foregroundColor: Colors.white,
+            ),
+            icon: const Icon(Icons.mic, size: 16),
+            label: const Text('Allow Microphone'),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final granted = await engine.requestMicPermission();
+              await platformRequestNotificationPermission();
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    granted
+                        ? 'Microphone access granted! You can now configure & enable Voice SOS.'
+                        : (engine.errorMessage ?? 'Microphone permission denied.'),
+                  ),
+                  backgroundColor: granted ? Colors.green : Colors.red,
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
 
   void _startSosCountdown() {
     setState(() {
@@ -47,7 +125,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
     });
   }
 
-  void _triggerSmartShieldSosPortal() {
+  Future<void> _triggerSmartShieldSosPortal() async {
+    final db = Provider.of<DatabaseService>(context, listen: false);
+    final gpsSample = await platformGetCurrentPosition();
+    if (!mounted) return;
+    final gpsStr = (gpsSample.ok && gpsSample.latitude != null && gpsSample.longitude != null)
+        ? '${gpsSample.latitude!.toStringAsFixed(5)}, ${gpsSample.longitude!.toStringAsFixed(5)}'
+        : 'GPS Unavailable';
+    final sosId = 'SOS-BTN-${DateTime.now().millisecondsSinceEpoch}';
+
+    db.addSosCase(
+      id: sosId,
+      userName: db.userName.isNotEmpty ? db.userName : 'SHE SHIELD User',
+      userPhone: db.userPhone,
+      gps: gpsStr,
+      locationName: gpsSample.ok ? 'Live Device GPS' : 'GPS Signal Unavailable',
+      deviceType: 'Hold SOS Panic Trigger',
+    );
+
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -85,29 +180,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: Colors.redAccent),
               ),
-              child: const Column(
+              child: Column(
                 children: [
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text("GPS Coordinates:", style: TextStyle(color: Colors.white70, fontSize: 12)),
-                      Text("23.0225° N, 72.5714° E", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                      const Text("Incident ID:", style: TextStyle(color: Colors.white70, fontSize: 12)),
+                      Flexible(
+                        child: Text(sosId, style: const TextStyle(color: Colors.amberAccent, fontWeight: FontWeight.bold, fontSize: 11.5), overflow: TextOverflow.ellipsis),
+                      ),
                     ],
                   ),
-                  SizedBox(height: 6),
+                  const SizedBox(height: 6),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text("Device Battery:", style: TextStyle(color: Colors.white70, fontSize: 12)),
-                      Text("88% (Optimal)", style: TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold, fontSize: 13)),
+                      const Text("GPS Coordinates:", style: TextStyle(color: Colors.white70, fontSize: 12)),
+                      Text(gpsStr, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12.5)),
                     ],
                   ),
-                  SizedBox(height: 6),
+                  const SizedBox(height: 6),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text("Signal Mesh:", style: TextStyle(color: Colors.white70, fontSize: 12)),
-                      Text("Active • 4 BLE Relays", style: TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.bold, fontSize: 13)),
+                      const Text("SQLite Persistence:", style: TextStyle(color: Colors.white70, fontSize: 12)),
+                      Text(
+                        db.isDatabaseLive ? "Synced Live" : "Local Standby",
+                        style: TextStyle(color: db.isDatabaseLive ? Colors.greenAccent : Colors.orangeAccent, fontWeight: FontWeight.bold, fontSize: 12),
+                      ),
                     ],
                   ),
                 ],
@@ -126,7 +226,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      "Live SOS alert dispatched to PCR Police Grid & Linked Guardians!",
+                      "Live SOS alert dispatched to Responder Grid & Linked Guardians!",
                       style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
                     ),
                   ),
@@ -141,7 +241,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               Navigator.pop(context);
               _showCancelPinDialog();
             },
-            child: const Text("False Alarm / Enter PIN", style: TextStyle(color: Colors.white70)),
+            child: const Text("Close / Enter PIN", style: TextStyle(color: Colors.white70)),
           ),
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(
@@ -152,14 +252,106 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
             icon: const Icon(Icons.phone),
             label: const Text("Call 112 Direct", style: TextStyle(fontWeight: FontWeight.bold)),
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text("Initiating Direct 112 Emergency Dispatch Call...")),
-              );
+              await platformOpenExternalUrl('tel:112');
             },
           ),
         ],
+      ),
+    );
+  }
+
+  Future<void> _showProfileModal(BuildContext context, DatabaseService db) async {
+    final nameCtrl = TextEditingController(text: db.userName);
+    final phoneCtrl = TextEditingController(text: db.userPhone);
+    bool saving = false;
+    String? err;
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModalState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: [
+              Icon(Icons.verified_user, color: Colors.purple.shade800),
+              const SizedBox(width: 8),
+              const Expanded(child: Text('Safety Profile & KYC', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold))),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Account Email: ${db.userEmail}', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 4),
+                Text('Role: ${db.currentRole ?? 'registered_user'} • Status: ${db.accountStatus}', style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    Chip(
+                      label: Text('Aadhaar: ${db.aadhaarVerified ? "Verified" : "Pending / Unverified"}', style: const TextStyle(fontSize: 11)),
+                      backgroundColor: db.aadhaarVerified ? Colors.green.shade100 : Colors.orange.shade50,
+                    ),
+                    Chip(
+                      label: Text('Biometrics: ${db.faceVerified ? "Verified" : "Not Verified"}', style: const TextStyle(fontSize: 11)),
+                      backgroundColor: db.faceVerified ? Colors.green.shade100 : Colors.orange.shade50,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: nameCtrl,
+                  decoration: const InputDecoration(labelText: 'Full Name', border: OutlineInputBorder(), isDense: true),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: phoneCtrl,
+                  keyboardType: TextInputType.phone,
+                  decoration: const InputDecoration(labelText: 'Phone Number', border: OutlineInputBorder(), isDense: true),
+                ),
+                if (err != null) ...[
+                  const SizedBox(height: 8),
+                  Text(err!, style: TextStyle(color: Colors.red.shade700, fontSize: 12)),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: saving ? null : () => Navigator.pop(ctx), child: const Text('Close')),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.purple.shade800, foregroundColor: Colors.white),
+              onPressed: saving
+                  ? null
+                  : () async {
+                      setModalState(() {
+                        saving = true;
+                        err = null;
+                      });
+                      final res = await db.updateProfile(fullName: nameCtrl.text, phone: phoneCtrl.text);
+                      if (!ctx.mounted) return;
+                      if (res.success) {
+                        Navigator.pop(ctx);
+                        if (mounted) {
+                          ScaffoldMessenger.of(this.context).showSnackBar(
+                            const SnackBar(content: Text('Safety Profile updated in SQLite!'), backgroundColor: Colors.green),
+                          );
+                        }
+                      } else {
+                        setModalState(() {
+                          saving = false;
+                          err = res.error ?? 'Update failed.';
+                        });
+                      }
+                    },
+              child: Text(saving ? 'Saving...' : 'Save Profile'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -211,72 +403,73 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     style: TextStyle(color: Colors.purple.shade900, fontWeight: FontWeight.bold),
                   ),
                 ),
-                const SizedBox(width: 12),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      "Hello, ${db.userName}!",
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
-                    const Text(
-                      "SHE SHIELD Security Core Active",
-                      style: TextStyle(fontSize: 11, color: Colors.white70),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            actions: [
-              InkWell(
-                borderRadius: BorderRadius.circular(16),
-                onTap: () {
-                  final nextVal = !db.vivaPrototypeMode;
-                  db.toggleVivaPrototypeMode(nextVal);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(nextVal
-                          ? "Viva Prototype Mode: Backlog modals enabled for future sprints"
-                          : "Full Running App Mode: All modules fully unlocked"),
-                      duration: const Duration(seconds: 2),
-                      backgroundColor: nextVal ? Colors.amber.shade900 : Colors.purple.shade900,
-                    ),
-                  );
-                },
-                child: Container(
-                  margin: const EdgeInsets.only(right: 14),
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: db.vivaPrototypeMode ? Colors.amber.shade400 : Colors.green.shade600,
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.15),
-                        blurRadius: 4,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: Row(
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(
-                        db.vivaPrototypeMode ? Icons.science_outlined : Icons.verified_user,
-                        color: db.vivaPrototypeMode ? Colors.brown.shade900 : Colors.white,
-                        size: 14,
-                      ),
-                      const SizedBox(width: 4),
                       Text(
-                        db.vivaPrototypeMode ? "Prototype Mode" : "Full App",
-                        style: TextStyle(
-                          color: db.vivaPrototypeMode ? Colors.brown.shade900 : Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 11,
+                        "Hello, ${db.userName}!",
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      InkWell(
+                        onTap: () => showLocalServerConfigDialog(context, db),
+                        borderRadius: BorderRadius.circular(8),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 2),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.fiber_manual_record,
+                                size: 8,
+                                color: db.isDatabaseLive ? Colors.greenAccent : Colors.amberAccent,
+                              ),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Text(
+                                  db.isDatabaseLive
+                                      ? "SQLite Live (${db.activeServerUrl.replaceFirst('http://', '')})"
+                                      : "Local Standby • Tap for Server IP",
+                                  style: const TextStyle(fontSize: 10, color: Colors.white70),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ],
                   ),
                 ),
+              ],
+            ),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.manage_accounts_outlined, color: Colors.white),
+                tooltip: "Safety Profile & KYC",
+                onPressed: () => _showProfileModal(context, db),
               ),
+              IconButton(
+                icon: const Icon(Icons.help_outline, color: Colors.white),
+                tooltip: "Help Center & Helplines",
+                onPressed: () => Navigator.pushNamed(context, '/help_center'),
+              ),
+              IconButton(
+                icon: const Icon(Icons.apps_rounded, color: Colors.white),
+                tooltip: "Simulation Sandbox",
+                onPressed: () => Navigator.pushNamed(context, '/demo_center'),
+              ),
+              IconButton(
+                icon: const Icon(Icons.logout, color: Colors.white),
+                tooltip: "Sign Out",
+                onPressed: () async {
+                  await db.logout();
+                  if (!context.mounted) return;
+                  Navigator.pushNamedAndRemoveUntil(context, '/welcome', (_) => false);
+                },
+              ),
+              const SizedBox(width: 4),
             ],
           ),
           body: SingleChildScrollView(
@@ -284,110 +477,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Safety Index Card / Gauge
-                Card(
-                  elevation: 4,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                  child: Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(20),
-                      gradient: LinearGradient(
-                        colors: [Colors.purple.shade900, Colors.purple.shade700],
-                      ),
-                    ),
-                    child: Column(
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  "SAFETY INDEX GAUGE",
-                                  style: TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 1.1,
-                                  ),
-                                ),
-                                SizedBox(height: 4),
-                                Text(
-                                  "AI Protection Layer Active",
-                                  style: TextStyle(color: Colors.white, fontSize: 14),
-                                ),
-                              ],
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: Colors.greenAccent.shade400,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Text(
-                                db.riskTrend,
-                                style: TextStyle(
-                                  color: Colors.green.shade900,
-                                  fontWeight: FontWeight.w900,
-                                  fontSize: 13,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 20),
-
-                        // Score Display & Gauge Bar
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              "${db.safetyIndex}%",
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 44,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            const Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  "STABLE SAFE",
-                                  style: TextStyle(
-                                    color: Colors.greenAccent,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                                Text(
-                                  "0 Active Threat Vectors",
-                                  style: TextStyle(color: Colors.white70, fontSize: 12),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: LinearProgressIndicator(
-                            value: db.safetyIndex / 100.0,
-                            minHeight: 10,
-                            backgroundColor: Colors.white24,
-                            valueColor: const AlwaysStoppedAnimation<Color>(Colors.greenAccent),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 20),
-
                 // 5-Second Hold Emergency SOS Button Section
                 Card(
                   elevation: 6,
@@ -504,38 +593,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   crossAxisSpacing: 14,
                   mainAxisSpacing: 14,
                   childAspectRatio: 1.15,
-                  children: [
+                  children: const [
                     _FeatureTile(
                       title: "SOS Protection Center",
                       subtitle: "Voice & Hardware Triggers",
                       icon: Icons.shield_moon,
-                      color: Colors.red.shade700,
+                      color: Color(0xFFD32F2F),
                       route: '/sos_protection',
-                      ticketId: "SHE-201",
-                      sprintName: "Sprint 2 (Current Sprint)",
-                      description: "Hardware button sequences, custom voice recognition ('Box Box'), silent panic dispatch, and offline fallback queue.",
-                      plannedFeatures: const [
-                        "Hardware Power/Vol Button Interceptor",
-                        "Multilingual Offline NLU Voice SOS",
-                        "Zero-Network SMS Fallback Dispatch",
-                      ],
-                      isBacklogItem: true,
+                      badge: "LIVE",
                     ),
                     _FeatureTile(
                       title: "Safe Arrival Travel Mode",
                       subtitle: "Route & Time Guardian",
                       icon: Icons.card_travel,
-                      color: Colors.teal.shade700,
+                      color: Color(0xFF00796B),
                       route: '/travel_monitor',
-                      ticketId: "SHE-202",
-                      sprintName: "Sprint 1 / Live Feature",
-                      description: "Countdown safety timeline with automated welfare check-ins and blackbox background audio/video recording.",
-                      plannedFeatures: const [
-                        "Safety Timeline Countdown Clock",
-                        "Background Audio/Video Recording Modes",
-                        "Automated Guardian Arrival Ping",
-                      ],
-                      isBacklogItem: false, // Running & Live!
+                      badge: "LIVE",
                     ),
                     _FeatureTile(
                       title: "Wearables Integration",
@@ -543,130 +616,68 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       icon: Icons.watch,
                       color: Colors.deepPurple,
                       route: '/wearable_pairing',
-                      ticketId: "SHE-301",
-                      sprintName: "Sprint 3 (Backlog)",
-                      description: "Bluetooth Low Energy integration for Smart Rings, Smart Bands, and Emergency Pendants with hardware distress triggers.",
-                      plannedFeatures: const [
-                        "BLE GATT Handshake & Battery Telemetry",
-                        "Sub-second Latency Hardware Panic Trigger",
-                        "Zero-Cellular Mesh Relay",
-                      ],
-                      isBacklogItem: true,
+                      badge: "LIVE",
                     ),
                     _FeatureTile(
                       title: "Report Cyber Crime",
                       subtitle: "AI Threat & Blackmail",
                       icon: Icons.security,
-                      color: Colors.pink.shade700,
+                      color: Color(0xFFC2185B),
                       route: '/cyber_report',
-                      ticketId: "SHE-203",
-                      sprintName: "Sprint 1 / Live Feature",
-                      description: "NLP threat evaluation engine for blackmail, cyberstalking, and instant cyber cell dossier generation.",
-                      plannedFeatures: const [
-                        "AI Threat Classification (Blackmail/Harassment)",
-                        "Offender URL & Screenshot Ingestion",
-                        "Direct National Cyber Crime Portal Link",
-                      ],
-                      isBacklogItem: false, // Running & Live!
+                      badge: "LIVE",
                     ),
                     _FeatureTile(
                       title: "Upload Evidence Vault",
                       subtitle: "Blockchain Hashed Media",
                       icon: Icons.enhanced_encryption,
-                      color: Colors.indigo.shade700,
+                      color: Color(0xFF303F9F),
                       route: '/evidence_vault',
-                      ticketId: "SHE-302",
-                      sprintName: "Sprint 3 (Backlog)",
-                      description: "Tamper-proof digital locker with dynamic SHA-256 integrity hash seals and legal chain of custody audit logs.",
-                      plannedFeatures: const [
-                        "SHA-256 Hashing at Ingestion",
-                        "AI Deepfake & Metadata Forensic Scanner",
-                        "Immutable Chain of Custody PDF Export",
-                      ],
-                      isBacklogItem: true,
+                      badge: "LIVE",
                     ),
                     _FeatureTile(
                       title: "Cab Monitoring",
                       subtitle: "Plate Score & Deviation",
                       icon: Icons.local_taxi,
-                      color: Colors.amber.shade900,
+                      color: Color(0xFFE65100),
                       route: '/cab_monitor',
-                      ticketId: "SHE-104",
-                      sprintName: "Sprint 1 (Done / Live Prototype)",
-                      description: "Vehicle registration plate validation, cab safety trust scores, and journey tracking.",
-                      plannedFeatures: const [
-                        "Registration Plate Number Lookup",
-                        "Cab Safety Trust Index Score",
-                        "Safe Journey Start & Reached Status",
-                      ],
-                      isBacklogItem: false, // Live Prototype!
+                      badge: "LIVE",
                     ),
                     _FeatureTile(
                       title: "Walk Monitoring",
                       subtitle: "Motion Anomaly Detector",
                       icon: Icons.directions_walk,
-                      color: Colors.blue.shade700,
+                      color: Color(0xFF1976D2),
                       route: '/walk_monitor',
-                      ticketId: "SHE-204",
-                      sprintName: "Sprint 2 (Current Sprint)",
-                      description: "Real-time motion anomaly detection for phone drop, phone snatching, running, and sudden halts.",
-                      plannedFeatures: const [
-                        "Device Accelerometer Motion Tracking",
-                        "Periodic Safety PIN Verification",
-                        "10-Second Auto-Escalation Countdown",
-                      ],
-                      isBacklogItem: true,
+                      badge: "LIVE",
                     ),
                     _FeatureTile(
                       title: "Complaint Status",
                       subtitle: "Track Cyber Filings",
                       icon: Icons.assignment_turned_in,
-                      color: Colors.orange.shade800,
+                      color: Color(0xFFE65100),
                       route: '/complaint_status',
-                      ticketId: "SHE-205",
-                      sprintName: "Sprint 2 (Current Sprint)",
-                      description: "5-stage lifecycle tracker for cyber complaints from AI analysis to law enforcement action.",
-                      plannedFeatures: const [
-                        "Real-time Case Timeline Stepper",
-                        "Official Case Index Status",
-                        "Resolution & Takedown Notices",
-                      ],
-                      isBacklogItem: true,
+                      badge: "LIVE",
                     ),
                     _FeatureTile(
                       title: "Manage Guardians",
                       subtitle: "Linked Family Network",
                       icon: Icons.people,
-                      color: Colors.purple.shade700,
+                      color: Color(0xFF7B1FA2),
                       route: '/manage_guardians',
-                      ticketId: "SHE-206",
-                      sprintName: "Sprint 2 (Current Sprint)",
-                      description: "Trusted contact onboarding with 4-stage link verification stepper and live emergency dispatch routing.",
-                      plannedFeatures: const [
-                        "Guardian Invitation & OTP Handshake",
-                        "4-Stage Link Approval Stepper",
-                        "Direct Dial & Perimeter Alerts",
-                      ],
-                      isBacklogItem: true,
+                      badge: "LIVE",
                     ),
                     _FeatureTile(
                       title: "Awareness Hub",
                       subtitle: "Safety Guides & Legal Rights",
                       icon: Icons.menu_book,
-                      color: Colors.green.shade800,
+                      color: Color(0xFF2E7D32),
                       route: '/awareness_hub',
-                      ticketId: "SHE-303",
-                      sprintName: "Sprint 3 (Backlog)",
-                      description: "Educational modules on cyber safety, self-defense legal rights, and emergency preparedness.",
-                      plannedFeatures: const [
-                        "Offline Legal Rights & Cyber Guides",
-                        "Interactive Pepper Spray Protocol",
-                        "Emergency Helpline Directory",
-                      ],
-                      isBacklogItem: true,
+                      badge: "LIVE",
                     ),
                   ],
                 ),
+                const SizedBox(height: 24),
+                const AudioEvidenceSection(),
                 const SizedBox(height: 20),
               ],
             ),
@@ -683,11 +694,7 @@ class _FeatureTile extends StatelessWidget {
   final IconData icon;
   final Color color;
   final String route;
-  final String ticketId;
-  final String sprintName;
-  final String description;
-  final List<String> plannedFeatures;
-  final bool isBacklogItem;
+  final String? badge;
 
   const _FeatureTile({
     required this.title,
@@ -695,38 +702,17 @@ class _FeatureTile extends StatelessWidget {
     required this.icon,
     required this.color,
     required this.route,
-    required this.ticketId,
-    required this.sprintName,
-    required this.description,
-    this.plannedFeatures = const [],
-    this.isBacklogItem = true,
+    this.badge = "LIVE",
   });
 
   @override
   Widget build(BuildContext context) {
-    final db = Provider.of<DatabaseService>(context);
-    final inPrototypeMode = db.vivaPrototypeMode;
-
     return Card(
       elevation: 3,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
-        onTap: () {
-          if (inPrototypeMode && isBacklogItem) {
-            JiraBacklogDialog.show(
-              context,
-              ticketId: ticketId,
-              title: title,
-              description: description,
-              route: route,
-              estimatedSprint: sprintName,
-              plannedFeatures: plannedFeatures,
-            );
-          } else {
-            Navigator.pushNamed(context, route);
-          }
-        },
+        onTap: () => Navigator.pushNamed(context, route),
         child: Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
@@ -749,22 +735,22 @@ class _FeatureTile extends StatelessWidget {
                     ),
                     child: Icon(icon, color: color, size: 22),
                   ),
-                  if (inPrototypeMode)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: isBacklogItem ? Colors.amber.shade100 : Colors.green.shade100,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        isBacklogItem ? ticketId : "LIVE",
-                        style: TextStyle(
-                          fontSize: 9,
-                          fontWeight: FontWeight.bold,
-                          color: isBacklogItem ? Colors.amber.shade900 : Colors.green.shade900,
-                        ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.green.shade50,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: Colors.green.shade300),
+                    ),
+                    child: Text(
+                      badge ?? "LIVE",
+                      style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.green.shade900,
                       ),
                     ),
+                  ),
                 ],
               ),
               Column(

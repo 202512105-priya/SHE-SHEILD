@@ -41,3 +41,13 @@ she_shield 2/
 **/.gradle/
 local.properties
 **/local.properties
+
+# Keystores, signing secrets & runtime database/audio files
+*.jks
+*.keystore
+she_shield/android/key.properties
+she_shield/server/*.db
+she_shield/server/*.db-*
+she_shield/server/secure_audio_vault/
+she_shield/test_*.png
+she_shield/final_screen.png

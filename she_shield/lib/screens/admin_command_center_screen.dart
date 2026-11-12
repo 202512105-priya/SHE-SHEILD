@@ -9,239 +9,314 @@ class AdminCommandCenterScreen extends StatefulWidget {
   State<AdminCommandCenterScreen> createState() => _AdminCommandCenterScreenState();
 }
 
-class _AdminCommandCenterScreenState extends State<AdminCommandCenterScreen> {
-  bool _isAuthenticated = false;
+class _AdminCommandCenterScreenState extends State<AdminCommandCenterScreen>
+    with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+  final TextEditingController _searchController = TextEditingController();
 
-  final _cardIdController = TextEditingController(text: 'ADM-99');
-  final _passwordController = TextEditingController(text: 'ADM123');
+  List<Map<String, dynamic>> _users = [];
+  List<Map<String, dynamic>> _roles = [];
+  List<Map<String, dynamic>> _auditLogs = [];
+  bool _loadingUsers = false;
+  bool _loadingLogs = false;
+  String? _loadError;
 
-  bool _layer1Passed = false;
-  bool _layer2Passed = false;
-  String? _errorMessage;
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _refreshAdminData();
+    });
+  }
 
   @override
   void dispose() {
-    _cardIdController.dispose();
-    _passwordController.dispose();
+    _tabController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
-  void _verifyAdminCredentials() {
-    final cardId = _cardIdController.text.trim();
-    final password = _passwordController.text.trim();
+  Future<void> _refreshAdminData({String? query}) async {
+    final db = Provider.of<DatabaseService>(context, listen: false);
+    if (!db.isAuthenticated || db.currentRole != 'admin') return;
 
     setState(() {
-      _errorMessage = null;
-      _layer1Passed = (cardId == 'ADM-99');
-      _layer2Passed = (password == 'ADM123');
+      _loadingUsers = true;
+      _loadingLogs = true;
+      _loadError = null;
     });
 
-    if (_layer1Passed && _layer2Passed) {
-      setState(() {
-        _isAuthenticated = true;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Layer 1 & Layer 2 Authentication Success! Access Granted to Command Center.'),
-          backgroundColor: Colors.green,
-        ),
-      );
-    } else {
-      setState(() {
-        if (!_layer1Passed && !_layer2Passed) {
-          _errorMessage = 'Invalid Admin Card ID & Platform Password!';
-        } else if (!_layer1Passed) {
-          _errorMessage = 'Invalid Layer 1 Admin Card ID! (Expected ADM-99)';
-        } else {
-          _errorMessage = 'Invalid Layer 2 Platform Password! (Expected ADM123)';
-        }
-      });
-    }
+    final q = query ?? _searchController.text.trim();
+    final usersRes = await db.adminFetchUsers(query: q);
+    final rolesRes = await db.adminFetchRoles();
+    final logsRes = await db.adminFetchAuditLogs();
+    await db.syncFromDatabase();
+
+    if (!mounted) return;
+    setState(() {
+      _loadingUsers = false;
+      _loadingLogs = false;
+      if (usersRes.success && usersRes.data != null) {
+        _users = usersRes.data!;
+      } else {
+        _loadError = usersRes.error ?? 'Failed to load users';
+      }
+      if (rolesRes.success && rolesRes.data != null) {
+        _roles = rolesRes.data!;
+      }
+      if (logsRes.success && logsRes.data != null) {
+        _auditLogs = logsRes.data!;
+      }
+    });
   }
 
-  @override
-  Widget build(BuildContext context) {
-    if (!_isAuthenticated) {
-      return _buildAuthenticationScreen();
-    }
+  Future<void> _handleAssignRole(Map<String, dynamic> user) async {
+    final db = Provider.of<DatabaseService>(context, listen: false);
+    final availableRoles = _roles.isNotEmpty
+        ? _roles
+        : const [
+            {'id': 'ROLE_USER', 'roleName': 'registered_user', 'description': 'Standard User'},
+            {'id': 'ROLE_GUARDIAN', 'roleName': 'guardian', 'description': 'Guardian'},
+            {'id': 'ROLE_OFFICER', 'roleName': 'officer', 'description': 'Officer / Responder'},
+            {'id': 'ROLE_ADMIN', 'roleName': 'admin', 'description': 'System Admin'},
+          ];
 
-    return _buildDashboardScreen();
-  }
+    String selectedRoleId = user['roleId']?.toString() ?? 'ROLE_USER';
 
-  // -------------------------------------------------------------
-  // LAYER 1 & LAYER 2 AUTHENTICATION SCREEN
-  // -------------------------------------------------------------
-  Widget _buildAuthenticationScreen() {
-    return Scaffold(
-      backgroundColor: const Color(0xFF1A1A2E),
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        foregroundColor: Colors.white,
-        title: const Text('Admin Command Authorization', style: TextStyle(color: Colors.white)),
-        centerTitle: true,
-      ),
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24.0),
-          child: Container(
-            constraints: const BoxConstraints(maxWidth: 450),
-            padding: const EdgeInsets.all(28.0),
-            decoration: BoxDecoration(
-              color: const Color(0xFF16213E),
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: Colors.purple.shade400.withValues(alpha: 0.5), width: 1.5),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.purple.shade900.withValues(alpha: 0.4),
-                  blurRadius: 30,
-                  spreadRadius: 5,
+    final confirmed = await showDialog<String>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModalState) => AlertDialog(
+          backgroundColor: const Color(0xFF1E293B),
+          title: Text(
+            'Assign Role — ${user['fullName']}',
+            style: const TextStyle(color: Colors.white, fontSize: 16),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: availableRoles.map((r) {
+              final rid = r['id'].toString();
+              final rname = r['roleName'].toString();
+              final desc = r['description']?.toString() ?? '';
+              final isSelected = selectedRoleId == rid;
+              return ListTile(
+                dense: true,
+                onTap: () => setModalState(() => selectedRoleId = rid),
+                leading: Icon(
+                  isSelected ? Icons.radio_button_checked : Icons.radio_button_off,
+                  color: Colors.purpleAccent,
                 ),
-              ],
+                title: Text(rname.toUpperCase(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                subtitle: Text(desc, style: const TextStyle(color: Colors.white60, fontSize: 11)),
+              );
+            }).toList(),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel', style: TextStyle(color: Colors.white60)),
             ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.purple.withValues(alpha: 0.2),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.admin_panel_settings, size: 56, color: Colors.purpleAccent),
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'SYSTEM COMMAND ACCESS',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                    letterSpacing: 1.2,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                const Text(
-                  'Two-Layer Administrative Clearance Required',
-                  style: TextStyle(fontSize: 12, color: Colors.white60),
-                ),
-                const SizedBox(height: 24),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.purple.shade700, foregroundColor: Colors.white),
+              onPressed: () => Navigator.pop(ctx, selectedRoleId),
+              child: const Text('Save Role'),
+            ),
+          ],
+        ),
+      ),
+    );
 
-                if (_errorMessage != null) ...[
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.red.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.redAccent),
+    if (confirmed == null || !mounted) return;
+    final res = await db.adminAssignRole(userId: user['id'].toString(), roleId: confirmed);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(res.success ? 'Updated role successfully.' : (res.error ?? 'Failed to update role')),
+        backgroundColor: res.success ? Colors.green : Colors.red,
+      ),
+    );
+    await _refreshAdminData();
+  }
+
+  Future<void> _handleToggleStatus(Map<String, dynamic> user) async {
+    final db = Provider.of<DatabaseService>(context, listen: false);
+    final current = user['accountStatus']?.toString() ?? 'ACTIVE';
+    final nextStatus = current == 'ACTIVE' ? 'SUSPENDED' : 'ACTIVE';
+
+    final res = await db.adminUpdateAccountStatus(
+      userId: user['id'].toString(),
+      accountStatus: nextStatus,
+    );
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          res.success
+              ? '${user['fullName']} is now $nextStatus'
+              : (res.error ?? 'Failed to update status'),
+        ),
+        backgroundColor: res.success ? Colors.green : Colors.red,
+      ),
+    );
+    await _refreshAdminData();
+  }
+
+  Future<void> _showCreateOfficerDialog() async {
+    final formKey = GlobalKey<FormState>();
+    final nameCtrl = TextEditingController();
+    final emailCtrl = TextEditingController();
+    final phoneCtrl = TextEditingController();
+    final passwordCtrl = TextEditingController();
+    final badgeCtrl = TextEditingController();
+    final stationCtrl = TextEditingController();
+    bool obscure = true;
+    bool saving = false;
+    String? errorMsg;
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModalState) => AlertDialog(
+          backgroundColor: const Color(0xFF1E293B),
+          title: const Row(
+            children: [
+              Icon(Icons.local_police, color: Colors.amber),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Create Authorized Officer Account',
+                  style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (errorMsg != null) ...[
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.redAccent),
+                      ),
+                      child: Text(errorMsg!, style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
                     ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.warning, color: Colors.redAccent, size: 20),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            _errorMessage!,
-                            style: const TextStyle(color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                      ],
+                    const SizedBox(height: 12),
+                  ],
+                  _darkField(nameCtrl, 'Officer Full Name', validator: (v) => (v == null || v.trim().length < 2) ? 'Enter valid name' : null),
+                  const SizedBox(height: 10),
+                  _darkField(emailCtrl, 'Official Email', validator: (v) => (v == null || !v.contains('@')) ? 'Enter valid email' : null),
+                  const SizedBox(height: 10),
+                  _darkField(phoneCtrl, 'Phone Number', validator: (v) => ((v ?? '').replaceAll(RegExp(r'\D'), '').length < 10) ? 'Enter 10-15 digits' : null),
+                  const SizedBox(height: 10),
+                  TextFormField(
+                    controller: passwordCtrl,
+                    obscureText: obscure,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      labelText: 'Officer Password',
+                      labelStyle: const TextStyle(color: Colors.white70, fontSize: 12),
+                      filled: true,
+                      fillColor: Colors.black26,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      suffixIcon: IconButton(
+                        icon: Icon(obscure ? Icons.visibility : Icons.visibility_off, color: Colors.white60),
+                        onPressed: () => setModalState(() => obscure = !obscure),
+                      ),
                     ),
+                    validator: (v) {
+                      final pw = v ?? '';
+                      if (pw.length < 8) return 'Min 8 chars';
+                      if (!RegExp(r'[A-Z]').hasMatch(pw) ||
+                          !RegExp(r'[a-z]').hasMatch(pw) ||
+                          !RegExp(r'\d').hasMatch(pw) ||
+                          !RegExp(r'''[!@#$%^&*(),.?":{}|<>_\-+=/\\;~\[\]]''').hasMatch(pw)) {
+                        return 'Require upper, lower, digit & symbol';
+                      }
+                      return null;
+                    },
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 10),
+                  _darkField(badgeCtrl, 'Badge ID (e.g. POLICE-GJ-2026)'),
+                  const SizedBox(height: 10),
+                  _darkField(stationCtrl, 'Police Station / Unit'),
                 ],
-
-                // Layer 1: Admin Card ID
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'LAYER 1: ADMIN CARD ID',
-                          style: TextStyle(color: Colors.purpleAccent, fontSize: 11, fontWeight: FontWeight.bold),
-                        ),
-                        if (_layer1Passed)
-                          const Text('✓ VERIFIED', style: TextStyle(color: Colors.greenAccent, fontSize: 11, fontWeight: FontWeight.bold)),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    TextField(
-                      controller: _cardIdController,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: InputDecoration(
-                        filled: true,
-                        fillColor: Colors.black26,
-                        hintText: 'Enter Admin Card ID (ADM-99)',
-                        hintStyle: const TextStyle(color: Colors.white38),
-                        prefixIcon: const Icon(Icons.badge, color: Colors.purpleAccent),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 18),
-
-                // Layer 2: Platform Password
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'LAYER 2: PLATFORM PASSWORD',
-                          style: TextStyle(color: Colors.purpleAccent, fontSize: 11, fontWeight: FontWeight.bold),
-                        ),
-                        if (_layer2Passed)
-                          const Text('✓ VERIFIED', style: TextStyle(color: Colors.greenAccent, fontSize: 11, fontWeight: FontWeight.bold)),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    TextField(
-                      controller: _passwordController,
-                      obscureText: true,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: InputDecoration(
-                        filled: true,
-                        fillColor: Colors.black26,
-                        hintText: 'Enter Platform Password (ADM123)',
-                        hintStyle: const TextStyle(color: Colors.white38),
-                        prefixIcon: const Icon(Icons.key, color: Colors.purpleAccent),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 28),
-
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.purpleAccent.shade700,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                    ),
-                    onPressed: _verifyAdminCredentials,
-                    icon: const Icon(Icons.lock_open),
-                    label: const Text('Unlock Command Center', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
+          actions: [
+            TextButton(
+              onPressed: saving ? null : () => Navigator.pop(ctx),
+              child: const Text('Cancel', style: TextStyle(color: Colors.white60)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.purple.shade700, foregroundColor: Colors.white),
+              onPressed: saving
+                  ? null
+                  : () async {
+                      if (!formKey.currentState!.validate()) return;
+                      setModalState(() {
+                        saving = true;
+                        errorMsg = null;
+                      });
+                      final db = Provider.of<DatabaseService>(context, listen: false);
+                      final res = await db.adminCreateOfficer(
+                        fullName: nameCtrl.text,
+                        email: emailCtrl.text,
+                        phone: phoneCtrl.text,
+                        password: passwordCtrl.text,
+                        badgeId: badgeCtrl.text,
+                        station: stationCtrl.text,
+                      );
+                      if (!ctx.mounted) return;
+                      if (res.success) {
+                        Navigator.pop(ctx);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Officer ${nameCtrl.text.trim()} provisioned in SQLite!'),
+                            backgroundColor: Colors.green,
+                          ),
+                        );
+                        _refreshAdminData();
+                      } else {
+                        setModalState(() {
+                          saving = false;
+                          errorMsg = res.error ?? 'Failed to create officer';
+                        });
+                      }
+                    },
+              child: Text(saving ? 'Provisioning...' : 'Create Officer'),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  // -------------------------------------------------------------
-  // DASHBOARD SCREEN (POST AUTHENTICATION)
-  // -------------------------------------------------------------
-  Widget _buildDashboardScreen() {
+  Widget _darkField(TextEditingController ctrl, String label, {String? Function(String?)? validator}) {
+    return TextFormField(
+      controller: ctrl,
+      style: const TextStyle(color: Colors.white),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: const TextStyle(color: Colors.white70, fontSize: 12),
+        filled: true,
+        fillColor: Colors.black26,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+      validator: validator,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final db = Provider.of<DatabaseService>(context);
 
     return Scaffold(
@@ -254,183 +329,356 @@ class _AdminCommandCenterScreenState extends State<AdminCommandCenterScreen> {
           children: [
             Icon(Icons.security, color: Colors.amber),
             SizedBox(width: 8),
-            Text('Admin Command Center', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+            Expanded(
+              child: Text(
+                'Admin Command Center',
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 17),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ],
         ),
         actions: [
-          Container(
-            margin: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.green.withValues(alpha: 0.2),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.green),
-            ),
-            child: const Row(
-              children: [
-                Icon(Icons.check_circle, color: Colors.green, size: 14),
-                SizedBox(width: 4),
-                Text('ADM-99 VERIFIED', style: TextStyle(color: Colors.green, fontSize: 11, fontWeight: FontWeight.bold)),
-              ],
-            ),
+          IconButton(
+            icon: const Icon(Icons.refresh, color: Colors.white),
+            tooltip: 'Refresh Users & Telemetry',
+            onPressed: () => _refreshAdminData(),
           ),
           IconButton(
             icon: const Icon(Icons.logout, color: Colors.redAccent),
-            tooltip: 'Lock Command Center',
-            onPressed: () {
-              setState(() {
-                _isAuthenticated = false;
-              });
+            tooltip: 'Sign Out',
+            onPressed: () async {
+              await db.logout();
+              if (!context.mounted) return;
+              Navigator.pushNamedAndRemoveUntil(context, '/welcome', (_) => false);
             },
           ),
         ],
+        bottom: TabBar(
+          controller: _tabController,
+          indicatorColor: Colors.amber,
+          labelColor: Colors.amber,
+          unselectedLabelColor: Colors.white70,
+          tabs: const [
+            Tab(icon: Icon(Icons.manage_accounts), text: 'Users & RBAC'),
+            Tab(icon: Icon(Icons.analytics), text: 'Operations & Audit'),
+          ],
+        ),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Security Level Card
-            Card(
-              color: const Color(0xFF1E293B),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-                side: const BorderSide(color: Colors.purpleAccent, width: 1.5),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(color: Colors.purple.withValues(alpha: 0.2), shape: BoxShape.circle),
-                      child: const Icon(Icons.shield, color: Colors.purpleAccent, size: 32),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Administrative Level 1 & 2 Security Clearance Active',
-                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Logged Card ID: ADM-99 | Session Token: SEC-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}',
-                            style: const TextStyle(color: Colors.white60, fontSize: 11),
-                          ),
-                        ],
+      body: TabBarView(
+        controller: _tabController,
+        children: [
+          _buildUserManagementTab(db),
+          _buildOperationsTab(db),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUserManagementTab(DatabaseService db) {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _searchController,
+                      style: const TextStyle(color: Colors.white),
+                      onSubmitted: (val) => _refreshAdminData(query: val),
+                      decoration: InputDecoration(
+                        hintText: 'Search by name, email, or phone...',
+                        hintStyle: const TextStyle(color: Colors.white38, fontSize: 13),
+                        prefixIcon: const Icon(Icons.search, color: Colors.purpleAccent),
+                        suffixIcon: _searchController.text.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear, color: Colors.white54),
+                                onPressed: () {
+                                  _searchController.clear();
+                                  _refreshAdminData(query: '');
+                                },
+                              )
+                            : null,
+                        filled: true,
+                        fillColor: const Color(0xFF1E293B),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        isDense: true,
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(width: 10),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.purple.shade700,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                    ),
+                    icon: const Icon(Icons.local_police, size: 18),
+                    label: const Text('Create Officer'),
+                    onPressed: _showCreateOfficerDialog,
+                  ),
+                ],
               ),
-            ),
-            const SizedBox(height: 20),
-
-            // Telemetry Grid Stats
-            const Text(
-              'PLATFORM TELEMETRY & HEALTH',
-              style: TextStyle(color: Colors.purpleAccent, fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 1.1),
-            ),
-            const SizedBox(height: 12),
-            GridView.count(
-              crossAxisCount: 2,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-              childAspectRatio: 1.6,
-              children: [
-                _buildStatTile('Active SOS Cases', '${db.sosCases.length}', Icons.emergency, Colors.redAccent),
-                _buildStatTile('Cyber Complaints', '${db.cyberComplaints.length}', Icons.security, Colors.amber),
-                _buildStatTile('Active Vault Assets', '${db.vaultAssets.length}', Icons.lock, Colors.blueAccent),
-                _buildStatTile('System Latency', '12 ms', Icons.speed, Colors.greenAccent),
+              if (_loadError != null) ...[
+                const SizedBox(height: 10),
+                Text(_loadError!, style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
               ],
-            ),
-            const SizedBox(height: 24),
+            ],
+          ),
+        ),
+        Expanded(
+          child: _loadingUsers
+              ? const Center(child: CircularProgressIndicator())
+              : _users.isEmpty
+                  ? const Center(
+                      child: Text('No users found matching your query.', style: TextStyle(color: Colors.white60)),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      itemCount: _users.length,
+                      itemBuilder: (ctx, i) {
+                        final u = _users[i];
+                        final role = u['role']?.toString() ?? 'registered_user';
+                        final status = u['accountStatus']?.toString() ?? 'ACTIVE';
+                        final isActive = status == 'ACTIVE';
+                        final createdAt = (u['createdAt']?.toString() ?? '').split('.').first;
+                        final roleColor = role == 'admin'
+                            ? Colors.purpleAccent
+                            : (role == 'officer'
+                                ? Colors.lightBlueAccent
+                                : (role == 'guardian' ? Colors.pinkAccent : Colors.tealAccent));
 
-            // System Control Center
-            const Text(
-              'COMMAND & DISPATCH CONTROLS',
-              style: TextStyle(color: Colors.purpleAccent, fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 1.1),
+                        return Card(
+                          color: const Color(0xFF1E293B),
+                          margin: const EdgeInsets.only(bottom: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            side: BorderSide(color: roleColor.withValues(alpha: 0.35)),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(14.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        u['fullName']?.toString() ?? '',
+                                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+                                      ),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                      decoration: BoxDecoration(
+                                        color: roleColor.withValues(alpha: 0.18),
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(color: roleColor),
+                                      ),
+                                      child: Text(
+                                        role.toUpperCase(),
+                                        style: TextStyle(color: roleColor, fontSize: 10, fontWeight: FontWeight.bold),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                      decoration: BoxDecoration(
+                                        color: (isActive ? Colors.green : Colors.red).withValues(alpha: 0.18),
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(color: isActive ? Colors.green : Colors.redAccent),
+                                      ),
+                                      child: Text(
+                                        status,
+                                        style: TextStyle(
+                                          color: isActive ? Colors.greenAccent : Colors.redAccent,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
+                                Text('${u['email']} • ${u['phone']}', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'ID: ${u['id']} • Aadhaar: ${u['aadhaarVerified'] == true ? "Verified" : "Unverified"} • Registered: ${createdAt.isEmpty ? "Migrated" : createdAt}',
+                                  style: const TextStyle(color: Colors.white54, fontSize: 11),
+                                ),
+                                if ((u['badgeId']?.toString() ?? '').isNotEmpty) ...[
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Badge: ${u['badgeId']} (${u['station']})',
+                                    style: const TextStyle(color: Colors.lightBlueAccent, fontSize: 11),
+                                  ),
+                                ],
+                                const SizedBox(height: 10),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 6,
+                                  children: [
+                                    OutlinedButton.icon(
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: Colors.purpleAccent,
+                                        side: const BorderSide(color: Colors.purpleAccent),
+                                        visualDensity: VisualDensity.compact,
+                                      ),
+                                      icon: const Icon(Icons.admin_panel_settings, size: 15),
+                                      label: const Text('Assign Role', style: TextStyle(fontSize: 11)),
+                                      onPressed: () => _handleAssignRole(u),
+                                    ),
+                                    OutlinedButton.icon(
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: isActive ? Colors.orangeAccent : Colors.greenAccent,
+                                        side: BorderSide(color: isActive ? Colors.orangeAccent : Colors.greenAccent),
+                                        visualDensity: VisualDensity.compact,
+                                      ),
+                                      icon: Icon(isActive ? Icons.block : Icons.check_circle, size: 15),
+                                      label: Text(isActive ? 'Deactivate' : 'Activate', style: const TextStyle(fontSize: 11)),
+                                      onPressed: u['id'] == db.currentUserId ? null : () => _handleToggleStatus(u),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildOperationsTab(DatabaseService db) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Card(
+            color: const Color(0xFF1E293B),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: const BorderSide(color: Colors.purpleAccent, width: 1.5),
             ),
-            const SizedBox(height: 12),
-            Card(
-              color: const Color(0xFF1E293B),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              child: Column(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Row(
                 children: [
-                  ListTile(
-                    leading: const Icon(Icons.broadcast_on_personal, color: Colors.redAccent),
-                    title: const Text('Emergency Broadcast System', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                    subtitle: const Text('Dispatch high-priority alert to all active units', style: TextStyle(color: Colors.white60, fontSize: 12)),
-                    trailing: ElevatedButton(
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
-                      onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Broadcasting emergency alert to all responder nodes...')),
-                        );
-                      },
-                      child: const Text('Broadcast'),
-                    ),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(color: Colors.purple.withValues(alpha: 0.2), shape: BoxShape.circle),
+                    child: const Icon(Icons.shield, color: Colors.purpleAccent, size: 32),
                   ),
-                  const Divider(color: Colors.white12, height: 1),
-                  ListTile(
-                    leading: const Icon(Icons.vpn_key, color: Colors.amber),
-                    title: const Text('Cryptographic Key Rotation', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                    subtitle: const Text('Rotate AES-256 master Vault keys', style: TextStyle(color: Colors.white60, fontSize: 12)),
-                    trailing: OutlinedButton(
-                      style: OutlinedButton.styleFrom(foregroundColor: Colors.amber, side: const BorderSide(color: Colors.amber)),
-                      onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('AES-256 Master Keys re-encrypted and rotated successfully.')),
-                        );
-                      },
-                      child: const Text('Rotate Keys'),
-                    ),
-                  ),
-                  const Divider(color: Colors.white12, height: 1),
-                  ListTile(
-                    leading: const Icon(Icons.receipt_long, color: Colors.cyanAccent),
-                    title: const Text('Audit Trail Log Stream', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                    subtitle: const Text('Inspect immutable tamper audit logs', style: TextStyle(color: Colors.white60, fontSize: 12)),
-                    trailing: OutlinedButton(
-                      style: OutlinedButton.styleFrom(foregroundColor: Colors.cyanAccent, side: const BorderSide(color: Colors.cyanAccent)),
-                      onPressed: () => _showAuditLogDialog(),
-                      child: const Text('View Logs'),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Authenticated Admin: ${db.userName}',
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${db.userEmail} • Role: ${db.currentRole} • ${db.permissions.length} RBAC Permissions',
+                          style: const TextStyle(color: Colors.white60, fontSize: 11),
+                        ),
+                      ],
                     ),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 24),
+          ),
+          const SizedBox(height: 20),
 
-            // Recent Incident Activity Log
-            const Text(
-              'LIVE SYSTEM AUDIT STREAM',
-              style: TextStyle(color: Colors.purpleAccent, fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 1.1),
-            ),
-            const SizedBox(height: 12),
-            Card(
-              color: const Color(0xFF1E293B),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              child: Padding(
-                padding: const EdgeInsets.all(12.0),
-                child: Column(
-                  children: [
-                    _buildAuditRow('SYS_AUTH', 'Card ID ADM-99 verified with Level 2 Pass.', '00:01 mins ago'),
-                    _buildAuditRow('SOS_ALERT', 'Distress signal received from Lat: 23.0234', '04:12 mins ago'),
-                    _buildAuditRow('VAULT_SYNC', 'Tamper check PASS for Travel_Trip_Audio.mp4', '12:45 mins ago'),
-                    _buildAuditRow('BLE_BEACON', 'Smartwatch pairing handshake verified.', '30:00 mins ago'),
-                  ],
-                ),
+          const Text(
+            'PLATFORM TELEMETRY & HEALTH',
+            style: TextStyle(color: Colors.purpleAccent, fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 1.1),
+          ),
+          const SizedBox(height: 12),
+          GridView.count(
+            crossAxisCount: 2,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
+            childAspectRatio: 1.6,
+            children: [
+              _buildStatTile('Registered Users', '${_users.length}', Icons.people, Colors.purpleAccent),
+              _buildStatTile('Active SOS Cases', '${db.sosCases.length}', Icons.emergency, Colors.redAccent),
+              _buildStatTile('Cyber Complaints', '${db.cyberComplaints.length}', Icons.security, Colors.amber),
+              _buildStatTile('Active Vault Assets', '${db.vaultAssets.length}', Icons.lock, Colors.blueAccent),
+            ],
+          ),
+          const SizedBox(height: 24),
+
+          const Text(
+            'AUTHORIZED MODULE SWITCHING',
+            style: TextStyle(color: Colors.purpleAccent, fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 1.1),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              ElevatedButton.icon(
+                icon: const Icon(Icons.local_police, size: 16),
+                label: const Text('Officer Responder Desk'),
+                onPressed: () => Navigator.pushNamed(context, '/responder_dashboard'),
               ),
+              ElevatedButton.icon(
+                icon: const Icon(Icons.family_restroom, size: 16),
+                label: const Text('Guardian Portal'),
+                onPressed: () => Navigator.pushNamed(context, '/guardian_dashboard'),
+              ),
+              ElevatedButton.icon(
+                icon: const Icon(Icons.shield, size: 16),
+                label: const Text('User Safety View'),
+                onPressed: () => Navigator.pushNamed(context, '/dashboard'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'LIVE SECURITY AUDIT STREAM',
+                style: TextStyle(color: Colors.purpleAccent, fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 1.1),
+              ),
+              if (_loadingLogs) const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Card(
+            color: const Color(0xFF1E293B),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: _auditLogs.isEmpty
+                  ? const Text('No security events recorded yet.', style: TextStyle(color: Colors.white54, fontSize: 12))
+                  : Column(
+                      children: _auditLogs.take(20).map((log) {
+                        return _buildAuditRow(
+                          log['action']?.toString() ?? 'AUDIT',
+                          '${log['actor_email'] ?? 'system'}: ${log['details'] ?? log['target_id'] ?? ''}',
+                          (log['created_at']?.toString() ?? '').split('.').first,
+                        );
+                      }).toList(),
+                    ),
             ),
-            const SizedBox(height: 30),
-          ],
-        ),
+          ),
+          const SizedBox(height: 30),
+        ],
       ),
     );
   }
@@ -476,34 +724,6 @@ class _AdminCommandCenterScreenState extends State<AdminCommandCenterScreen> {
           Text(time, style: const TextStyle(color: Colors.white38, fontSize: 10)),
         ],
       ),
-    );
-  }
-
-  void _showAuditLogDialog() {
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF1E293B),
-          title: const Text('Cryptographic Tamper Audit Log', style: TextStyle(color: Colors.white)),
-          content: const Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('• SHA-256 HASH VERIFICATION: PASS', style: TextStyle(color: Colors.greenAccent, fontSize: 12)),
-              Text('• LOG ENCRYPTION MODE: AES-256 GCM', style: TextStyle(color: Colors.white70, fontSize: 12)),
-              Text('• TOTAL AUDITED EVENTS: 1,489', style: TextStyle(color: Colors.white70, fontSize: 12)),
-              Text('• NO UNAUTHORIZED TAMPERING DETECTED', style: TextStyle(color: Colors.greenAccent, fontSize: 12, fontWeight: FontWeight.bold)),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Close Log', style: TextStyle(color: Colors.purpleAccent)),
-            ),
-          ],
-        );
-      },
     );
   }
 }

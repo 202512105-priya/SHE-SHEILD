@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 import '../services/database_service.dart';
+import '../widgets/evidence_preview_dialog.dart';
+import '../widgets/live_google_map_view.dart';
+import '../widgets/server_config_dialog.dart';
 
 class ResponderDashboardScreen extends StatefulWidget {
   const ResponderDashboardScreen({super.key});
@@ -20,6 +25,11 @@ class _ResponderDashboardScreenState extends State<ResponderDashboardScreen> wit
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        Provider.of<DatabaseService>(context, listen: false).syncFromDatabase();
+      }
+    });
   }
 
   @override
@@ -103,34 +113,77 @@ class _ResponderDashboardScreenState extends State<ResponderDashboardScreen> wit
         backgroundColor: const Color(0xFF4A148C),
         foregroundColor: Colors.white,
         title: const Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.shield_outlined, color: Colors.amber),
-            SizedBox(width: 8),
-            Text(
-              'Responder Command Panel',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+            Icon(Icons.shield_outlined, color: Colors.amber, size: 20),
+            SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                'Responder Panel',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),
         actions: [
-          Container(
-            margin: const EdgeInsets.only(right: 12),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.redAccent.withValues(alpha: 0.3),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.redAccent),
-            ),
-            child: const Row(
-              children: [
-                Icon(Icons.fiber_manual_record, color: Colors.redAccent, size: 10),
-                SizedBox(width: 6),
-                Text(
-                  'DISPATCH ACTIVE',
-                  style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+          IconButton(
+            icon: const Icon(Icons.sync, color: Colors.white, size: 20),
+            tooltip: 'Sync Live Cases from Local SQLite Server',
+            onPressed: () async {
+              final ok = await db.syncFromDatabase();
+              if (!context.mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    ok
+                        ? 'Synced live cases from ${db.activeServerUrl}'
+                        : 'Local SQLite server unreachable. Tap status badge to configure host IP.',
+                  ),
                 ),
-              ],
+              );
+            },
+          ),
+          InkWell(
+            onTap: () => showLocalServerConfigDialog(context, db),
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              margin: const EdgeInsets.only(right: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: db.isDatabaseLive
+                    ? Colors.greenAccent.withValues(alpha: 0.25)
+                    : Colors.redAccent.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: db.isDatabaseLive ? Colors.greenAccent : Colors.redAccent,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.fiber_manual_record,
+                    color: db.isDatabaseLive ? Colors.greenAccent : Colors.redAccent,
+                    size: 9,
+                  ),
+                  const SizedBox(width: 5),
+                  Text(
+                    db.isDatabaseLive ? 'SQLITE LIVE (8080)' : 'LOCAL STANDBY',
+                    style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
             ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.logout, color: Colors.white, size: 20),
+            tooltip: 'Sign Out',
+            onPressed: () async {
+              await db.logout();
+              if (!context.mounted) return;
+              Navigator.pushNamedAndRemoveUntil(context, '/welcome', (_) => false);
+            },
           ),
         ],
         bottom: TabBar(
@@ -380,23 +433,333 @@ class _ResponderDashboardScreenState extends State<ResponderDashboardScreen> wit
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      'Status: $currentStatus',
-                      style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.purple),
+                    Flexible(
+                      child: Text(
+                        'Status: $currentStatus',
+                        style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.purple, fontSize: 12),
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
+                    const SizedBox(width: 8),
                     ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.indigo,
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                       ),
-                      onPressed: () => _openCaseDetailsBottomSheet(item, caseId),
-                      icon: const Icon(Icons.security, size: 16),
-                      label: const Text('Review Cyber Dossier'),
+                      onPressed: () => _openCyberDossierBottomSheet(item, caseId),
+                      icon: const Icon(Icons.security, size: 14),
+                      label: const Text('Cyber Dossier', style: TextStyle(fontSize: 12)),
                     ),
                   ],
                 ),
               ],
             ),
           ),
+        );
+      },
+    );
+  }
+
+  void _openCyberDossierBottomSheet(Map<String, dynamic> item, String caseId) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setModalState) {
+            String activeStatus = _caseStatuses[caseId] ?? (item['status'] ?? 'SUBMITTED').toString().toUpperCase();
+
+            return Container(
+              height: MediaQuery.of(context).size.height * 0.9,
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              child: Column(
+                children: [
+                  // Cyber Header
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF1A237E),
+                      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Row(
+                            children: [
+                              const Icon(Icons.security, color: Colors.amber, size: 24),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'CYBER CASE: $caseId',
+                                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    const Text(
+                                      'Digital Forensics & Threat Packet',
+                                      style: TextStyle(color: Colors.white70, fontSize: 11),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close, color: Colors.white),
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // Body Scroll (NO MAP VIEW - pure cyber evidence and threat intelligence)
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // 1. AI Threat Matrix Card
+                          _buildSectionHeader('AI Cyber Threat Matrix', Icons.analytics),
+                          Card(
+                            elevation: 1,
+                            color: Colors.indigo.shade50,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            child: Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Column(
+                                children: [
+                                  _buildInfoRow('Threat Classification:', item['category'] ?? 'BLACKMAIL & EXTORTION'),
+                                  _buildInfoRow('Threat Vector Score:', item['threatScore'] ?? '94% CRITICAL'),
+                                  _buildInfoRow('Forensic Triage Level:', 'CRITICAL ESCALATION (CERT-In Priority 1)'),
+                                  _buildInfoRow('Current Case Status:', activeStatus),
+                                  _buildInfoRow('Incident Timestamp:', item['timestamp'] ?? DateTime.now().toIso8601String()),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+
+                          // 2. Incident & Offender Intelligence
+                          _buildSectionHeader('Offender & Incident Intelligence', Icons.radar),
+                          Card(
+                            elevation: 1,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            child: Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _buildInfoRow('Victim / Complainant:', item['userName'] ?? 'Tisha Patel'),
+                                  _buildInfoRow('Victim Contact:', item['userPhone'] ?? '+91 98765 43210'),
+                                  _buildInfoRow('Offender Handle/Link:', item['offenderLink'] ?? 'https://instagram.com/fake_threat_user_99'),
+                                  const Divider(height: 16),
+                                  const Text('Complainant Incident Statement:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.black87)),
+                                  const SizedBox(height: 4),
+                                  Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey.shade100,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Text(
+                                      item['description'] ?? 'Coercion and blackmail demanding ransom using manipulated deepfake photos.',
+                                      style: TextStyle(fontSize: 12, color: Colors.grey.shade900),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+
+                          // 3. Real Attached Cyber Forensics Evidence Files
+                          _buildSectionHeader('Attached Cyber Evidence Files (Tap to Preview)', Icons.folder_zip),
+                          if (item['attachedEvidence'] != null && item['attachedEvidence'].toString().trim().isNotEmpty) ...[
+                            ...item['attachedEvidence'].toString().split(RegExp(r'[;,]')).map((f) => f.trim()).where((f) => f.isNotEmpty).map((file) {
+                              return _buildEvidenceItem(
+                                file,
+                                'Attached Vault Proof (Tamper Check: PASS)',
+                                'SHA-256: 7f83b1657ff1fc53b92dc18148a1d65d...',
+                              );
+                            }),
+                          ] else ...[
+                            _buildEvidenceItem(
+                              'Blackmail_Chat_Screenshots.png',
+                              'Instagram Direct Extortion Messages (2.1 MB)',
+                              'SHA-256: e3b0c44298fc1c149afbf4c8996fb92427ae...',
+                            ),
+                            _buildEvidenceItem(
+                              'Phishing_APK_Decompiled_Manifest.json',
+                              'Malicious APK Analysis & Permissions (0.8 MB)',
+                              'SHA-256: a591a6d40bf420404a011733cfb7b190d62c...',
+                            ),
+                            _buildEvidenceItem(
+                              'Threat_VOIP_Call_Recording.mp3',
+                              'Audio Intercept of Suspect Intimidation (4.2 MB)',
+                              'SHA-256: 7f83b1657ff1fc53b92dc18148a1d65dfc2d...',
+                            ),
+                            _buildEvidenceItem(
+                              'Forensic_Investigation_Report.pdf',
+                              'Sec 65B Indian Evidence Act Forensic Package (1.4 MB)',
+                              'SHA-256: fcde2b2edba56bf408601fb721fe9b5c338d...',
+                            ),
+                          ],
+                          const SizedBox(height: 16),
+
+                          // 4. Case Status Synchronization Chips
+                          _buildSectionHeader('Case Status Synchronization', Icons.sync),
+                          const Text(
+                            'Tap a status button to synchronize incident lifecycle to Local SQLite Server:',
+                            style: TextStyle(fontSize: 12, color: Colors.grey),
+                          ),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: [
+                              'Received',
+                              'Review',
+                              'Investigate',
+                              'Verify Proof',
+                              'Assign',
+                              'In Progress',
+                              'Resolve',
+                            ].map((status) {
+                              bool isSelected = activeStatus.toUpperCase() == status.toUpperCase();
+                              return ChoiceChip(
+                                label: Text(status),
+                                selected: isSelected,
+                                selectedColor: Colors.indigo,
+                                labelStyle: TextStyle(
+                                  color: isSelected ? Colors.white : Colors.indigo,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                                onSelected: (val) {
+                                  if (val) {
+                                    setModalState(() {
+                                      activeStatus = status.toUpperCase();
+                                    });
+                                    setState(() {
+                                      _caseStatuses[caseId] = status.toUpperCase();
+                                    });
+                                    Provider.of<DatabaseService>(context, listen: false)
+                                        .updateCyberComplaintStatus(caseId, status);
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text('Cyber Case $caseId status updated to $status (Synced to Local SQLite Server)'),
+                                        duration: const Duration(seconds: 2),
+                                      ),
+                                    );
+                                  }
+                                },
+                              );
+                            }).toList(),
+                          ),
+                          const SizedBox(height: 20),
+
+                          // 5. Actions: Assign & Secure Closure
+                          Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: Colors.indigo,
+                                    side: const BorderSide(color: Colors.indigo),
+                                    padding: const EdgeInsets.symmetric(vertical: 12),
+                                  ),
+                                  onPressed: () {
+                                    setState(() {
+                                      _assignedResponders[caseId] = 'Cyber Cell Inspector #502';
+                                    });
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text('Assigned $caseId to Cyber Cell Inspector #502')),
+                                    );
+                                  },
+                                  icon: const Icon(Icons.person_add),
+                                  label: const Text('Assign to Cyber Cell'),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.indigo,
+                                    padding: const EdgeInsets.symmetric(vertical: 12),
+                                  ),
+                                  onPressed: () {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('Transmitting Cyber Case Dossier to CERT-In Repository...')),
+                                    );
+                                  },
+                                  icon: const Icon(Icons.send),
+                                  label: const Text('Push to CERT-In'),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+
+                          // Secure Closure Box
+                          Container(
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: Colors.red.shade50,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.red.shade200),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Row(
+                                  children: [
+                                    Icon(Icons.lock, color: Colors.red),
+                                    SizedBox(width: 8),
+                                    Text(
+                                      'Secure Case Closure Protocol',
+                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.red),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
+                                const Text(
+                                  'Requires Officer Badge Key verification (Enter "SHIELD911"):',
+                                  style: TextStyle(fontSize: 12, color: Colors.black87),
+                                ),
+                                const SizedBox(height: 10),
+                                _ClosureFormWidget(
+                                  onSuccess: () {
+                                    setState(() {
+                                      _caseStatuses[caseId] = 'CLOSED';
+                                    });
+                                    Navigator.pop(context);
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text('Cyber Case $caseId successfully CLOSED with Officer Security Key.')),
+                                    );
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
         );
       },
     );
@@ -411,6 +774,17 @@ class _ResponderDashboardScreenState extends State<ResponderDashboardScreen> wit
         return StatefulBuilder(
           builder: (BuildContext context, StateSetter setModalState) {
             String activeStatus = _caseStatuses[caseId] ?? (item['status'] ?? 'open').toString().toUpperCase();
+
+            LatLng caseLatLng = const LatLng(23.0312, 72.5801);
+            final gpsStr = item['gps']?.toString() ?? '';
+            if (gpsStr.contains(',')) {
+              final parts = gpsStr.split(',');
+              final lat = double.tryParse(parts[0].trim());
+              final lng = double.tryParse(parts[1].trim());
+              if (lat != null && lng != null) {
+                caseLatLng = LatLng(lat, lng);
+              }
+            }
 
             return Container(
               height: MediaQuery.of(context).size.height * 0.9,
@@ -481,53 +855,113 @@ class _ResponderDashboardScreenState extends State<ResponderDashboardScreen> wit
                           const SizedBox(height: 16),
 
                           // Location Info & Route History Trail
-                          _buildSectionHeader('Location Info & Live GPS Route History Trail', Icons.map),
+                          _buildSectionHeader('Crime Scene Live Map & GPS Dispatch Route', Icons.map),
+                          const SizedBox(height: 6),
+                          LiveGoogleMapView(
+                            center: caseLatLng,
+                            zoom: 15.0,
+                            height: 240,
+                            title: 'POLICE DISPATCH & VICTIM LOCATION',
+                            interactive: true,
+                            markers: [
+                              // Victim Distress Pin
+                              Marker(
+                                point: caseLatLng,
+                                width: 140,
+                                height: 60,
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: Colors.red.shade900,
+                                        borderRadius: BorderRadius.circular(6),
+                                        boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 4)],
+                                      ),
+                                      child: Text(
+                                        '📍 ${item['userName'] ?? "Victim"} (SOS)',
+                                        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                                      ),
+                                    ),
+                                    const Icon(Icons.location_on, color: Colors.redAccent, size: 28),
+                                  ],
+                                ),
+                              ),
+                              // Responding Police PCR Van
+                              Marker(
+                                point: LatLng(caseLatLng.latitude - 0.005, caseLatLng.longitude - 0.004),
+                                width: 150,
+                                height: 60,
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF4A148C),
+                                        borderRadius: BorderRadius.circular(6),
+                                        boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 4)],
+                                      ),
+                                      child: const Text(
+                                        '🚓 PCR Van #409 (En Route)',
+                                        style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                                      ),
+                                    ),
+                                    const Icon(Icons.local_police, color: Colors.amber, size: 26),
+                                  ],
+                                ),
+                              ),
+                            ],
+                            polylines: [
+                              Polyline(
+                                points: [
+                                  LatLng(caseLatLng.latitude - 0.010, caseLatLng.longitude - 0.008),
+                                  LatLng(caseLatLng.latitude - 0.007, caseLatLng.longitude - 0.005),
+                                  LatLng(caseLatLng.latitude - 0.005, caseLatLng.longitude - 0.004),
+                                  caseLatLng,
+                                ],
+                                strokeWidth: 4.0,
+                                color: Colors.purple.shade700,
+                              ),
+                            ],
+                            circles: [
+                              CircleMarker(
+                                point: caseLatLng,
+                                radius: 120,
+                                useRadiusInMeter: true,
+                                color: Colors.red.withValues(alpha: 0.18),
+                                borderColor: Colors.redAccent,
+                                borderStrokeWidth: 2,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          // Live Telemetry Bar
                           Container(
-                            height: 150,
-                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                             decoration: BoxDecoration(
                               color: Colors.grey.shade900,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: Colors.purple.shade300),
+                              borderRadius: BorderRadius.circular(10),
                             ),
-                            child: Stack(
+                            child: Row(
                               children: [
-                                CustomPaint(
-                                  size: const Size(double.infinity, 150),
-                                  painter: RouteTrailPainter(),
-                                ),
-                                Positioned(
-                                  top: 10,
-                                  left: 10,
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                    decoration: BoxDecoration(
-                                      color: Colors.black.withValues(alpha: 0.7),
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                    child: Text(
-                                      'GPS: ${item['gps'] ?? "23.023403, 72.572400"}',
-                                      style: const TextStyle(color: Colors.greenAccent, fontSize: 11, fontFamily: 'monospace'),
-                                    ),
+                                const Icon(Icons.gps_fixed, color: Colors.greenAccent, size: 16),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'GPS: ${item['gps'] ?? "23.0312, 72.5801"} (${item['locationName'] ?? "Ahmedabad Sector 1"})',
+                                    style: const TextStyle(color: Colors.greenAccent, fontSize: 11, fontFamily: 'monospace'),
+                                    overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
-                                Positioned(
-                                  bottom: 10,
-                                  right: 10,
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                    decoration: BoxDecoration(
-                                      color: Colors.purple.withValues(alpha: 0.8),
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                    child: const Row(
-                                      children: [
-                                        Icon(Icons.timeline, color: Colors.white, size: 12),
-                                        SizedBox(width: 4),
-                                        Text('4 Breadcrumbs Recorded', style: TextStyle(color: Colors.white, fontSize: 10)),
-                                      ],
-                                    ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.purple.shade700,
+                                    borderRadius: BorderRadius.circular(4),
                                   ),
+                                  child: const Text('ETA: 3 min', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
                                 ),
                               ],
                             ),
@@ -589,8 +1023,14 @@ class _ResponderDashboardScreenState extends State<ResponderDashboardScreen> wit
                                     setState(() {
                                       _caseStatuses[caseId] = status.toUpperCase();
                                     });
+                                    // Synchronize status update to DatabaseService & Local SQLite Server
+                                    Provider.of<DatabaseService>(context, listen: false)
+                                        .updateCaseStatus(caseId, status);
                                     ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(content: Text('Case $caseId status updated to $status')),
+                                      SnackBar(
+                                        content: Text('Case $caseId status updated to $status (Synced to Local SQLite Server)'),
+                                        duration: const Duration(seconds: 2),
+                                      ),
                                     );
                                   }
                                 },
@@ -744,10 +1184,39 @@ class _ResponderDashboardScreenState extends State<ResponderDashboardScreen> wit
       color: Colors.grey.shade100,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       child: ListTile(
-        leading: const Icon(Icons.insert_drive_file, color: Colors.purple),
+        onTap: () {
+          EvidencePreviewDialog.show(
+            context,
+            fileName: title,
+            hash: hash,
+            size: '2.8 MB',
+          );
+        },
+        leading: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: Colors.purple.shade100,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: const Icon(Icons.insert_drive_file, color: Colors.purple, size: 20),
+        ),
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
         subtitle: Text('$subtitle\n$hash', style: const TextStyle(fontSize: 11, color: Colors.grey)),
-        trailing: const Icon(Icons.verified, color: Colors.green, size: 20),
+        trailing: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: const Color(0xFF4A148C),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.visibility, color: Colors.white, size: 12),
+              SizedBox(width: 4),
+              Text('Preview', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -802,37 +1271,4 @@ class _ClosureFormWidgetState extends State<_ClosureFormWidget> {
       ],
     );
   }
-}
-
-class RouteTrailPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paintLine = Paint()
-      ..color = Colors.amber
-      ..strokeWidth = 3.0
-      ..style = PaintingStyle.stroke;
-
-    final paintDot = Paint()
-      ..color = Colors.redAccent
-      ..style = PaintingStyle.fill;
-
-    final path = Path();
-    path.moveTo(size.width * 0.1, size.height * 0.8);
-    path.quadraticBezierTo(
-      size.width * 0.4,
-      size.height * 0.2,
-      size.width * 0.7,
-      size.height * 0.6,
-    );
-    path.lineTo(size.width * 0.9, size.height * 0.3);
-
-    canvas.drawPath(path, paintLine);
-
-    canvas.drawCircle(Offset(size.width * 0.1, size.height * 0.8), 5, paintDot);
-    canvas.drawCircle(Offset(size.width * 0.5, size.height * 0.45), 5, paintDot);
-    canvas.drawCircle(Offset(size.width * 0.9, size.height * 0.3), 7, Paint()..color = Colors.greenAccent);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

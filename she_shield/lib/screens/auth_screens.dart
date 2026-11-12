@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/database_service.dart';
+import '../widgets/server_config_dialog.dart';
 
 // Helper Glassmorphism Card Widget
 class GlassCard extends StatelessWidget {
@@ -39,7 +40,65 @@ class GlassCard extends StatelessWidget {
   }
 }
 
-// Welcome Screen with Role Selector
+bool _isValidEmail(String email) {
+  return RegExp(r'^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$').hasMatch(email.trim());
+}
+
+String? _validateStrongPassword(String password) {
+  if (password.length < 8) return 'At least 8 characters required';
+  if (!RegExp(r'[A-Z]').hasMatch(password)) return 'Include at least 1 uppercase letter';
+  if (!RegExp(r'[a-z]').hasMatch(password)) return 'Include at least 1 lowercase letter';
+  if (!RegExp(r'\d').hasMatch(password)) return 'Include at least 1 digit';
+  if (!RegExp(r'''[!@#$%^&*(),.?":{}|<>_\-+=/\\;~\[\]]''').hasMatch(password)) {
+    return 'Include at least 1 special character';
+  }
+  return null;
+}
+
+double _passwordStrengthScore(String pw) {
+  if (pw.isEmpty) return 0.0;
+  double score = 0;
+  if (pw.length >= 8) score += 0.2;
+  if (RegExp(r'[A-Z]').hasMatch(pw)) score += 0.2;
+  if (RegExp(r'[a-z]').hasMatch(pw)) score += 0.2;
+  if (RegExp(r'\d').hasMatch(pw)) score += 0.2;
+  if (RegExp(r'''[!@#$%^&*(),.?":{}|<>_\-+=/\\;~\[\]]''').hasMatch(pw)) score += 0.2;
+  return score;
+}
+
+bool _verhoeffCheck(String numStr) {
+  if (!RegExp(r'^\d{12}$').hasMatch(numStr)) return false;
+  const d = [
+    [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+    [1, 2, 3, 4, 0, 6, 7, 8, 9, 5],
+    [2, 3, 4, 0, 1, 7, 8, 9, 5, 6],
+    [3, 4, 0, 1, 2, 8, 9, 5, 6, 7],
+    [4, 0, 1, 2, 3, 9, 5, 6, 7, 8],
+    [5, 9, 8, 7, 6, 0, 4, 3, 2, 1],
+    [6, 5, 9, 8, 7, 1, 0, 4, 3, 2],
+    [7, 6, 5, 9, 8, 2, 1, 0, 4, 3],
+    [8, 7, 6, 5, 9, 3, 2, 1, 0, 4],
+    [9, 8, 7, 6, 5, 4, 3, 2, 1, 0],
+  ];
+  const p = [
+    [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+    [1, 5, 7, 6, 2, 8, 3, 0, 9, 4],
+    [5, 8, 0, 3, 7, 9, 6, 1, 4, 2],
+    [8, 9, 1, 6, 0, 4, 3, 5, 2, 7],
+    [9, 4, 5, 3, 1, 2, 6, 8, 7, 0],
+    [4, 2, 8, 6, 5, 7, 3, 9, 0, 1],
+    [2, 7, 9, 3, 8, 0, 6, 4, 1, 5],
+    [7, 0, 4, 6, 9, 1, 3, 2, 5, 8],
+  ];
+  int c = 0;
+  final reversed = numStr.split('').reversed.toList();
+  for (int i = 0; i < reversed.length; i++) {
+    c = d[c][p[i % 8][int.parse(reversed[i])]];
+  }
+  return c == 0;
+}
+
+// Welcome Screen with Role Entry Points
 class WelcomeScreen extends StatelessWidget {
   const WelcomeScreen({super.key});
 
@@ -64,7 +123,7 @@ class WelcomeScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const SizedBox(height: 20),
+                const SizedBox(height: 16),
                 Center(
                   child: Container(
                     padding: const EdgeInsets.all(16),
@@ -101,9 +160,60 @@ class WelcomeScreen extends StatelessWidget {
                     color: Colors.grey.shade700,
                   ),
                 ),
-                const SizedBox(height: 32),
+                const SizedBox(height: 12),
+                Consumer<DatabaseService>(
+                  builder: (context, db, _) {
+                    return Center(
+                      child: InkWell(
+                        onTap: () => showLocalServerConfigDialog(context, db),
+                        borderRadius: BorderRadius.circular(20),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: db.isDatabaseLive ? Colors.green.shade50 : Colors.orange.shade50,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: db.isDatabaseLive ? Colors.green.shade300 : Colors.orange.shade300,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.dns,
+                                size: 14,
+                                color: db.isDatabaseLive ? Colors.green.shade700 : Colors.orange.shade800,
+                              ),
+                              const SizedBox(width: 6),
+                              Flexible(
+                                child: Text(
+                                  db.isDatabaseLive
+                                      ? "SQLite Live: ${db.activeServerUrl.replaceFirst('http://', '')}"
+                                      : "Local SQLite Standby (Tap to Connect)",
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: db.isDatabaseLive ? Colors.green.shade800 : Colors.orange.shade900,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Icon(
+                                Icons.settings,
+                                size: 13,
+                                color: db.isDatabaseLive ? Colors.green.shade700 : Colors.orange.shade800,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 24),
                 const Text(
-                  "Select Your Role",
+                  "Access Portal",
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
@@ -112,63 +222,47 @@ class WelcomeScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  "Choose how you want to access the safety portal",
+                  "Register as a User or Guardian, or sign in with your verified role credentials",
                   style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 18),
 
-                // Role Card 1: Women User
                 _RoleCard(
-                  title: "Women User",
-                  subtitle: "Access personal safety, travel guardian, SOS triggers & cyber defense",
-                  icon: Icons.person,
+                  title: "New Account Registration",
+                  subtitle: "Register as a Safety User or Trusted Guardian in SQLite",
+                  icon: Icons.person_add,
                   color: Colors.purple,
-                  onTap: () {
-                    Provider.of<DatabaseService>(context, listen: false).setRole('user');
-                    Navigator.pushNamed(context, '/register_user');
-                  },
+                  onTap: () => Navigator.pushNamed(context, '/register_user'),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 14),
 
-                // Role Card 2: Guardian
                 _RoleCard(
-                  title: "Guardian / Family Member",
-                  subtitle: "Monitor loved ones, receive real-time alerts & live location updates",
-                  icon: Icons.people,
+                  title: "Sign In (User / Guardian)",
+                  subtitle: "Sign in to access your personal safety dashboard or linked family guardian view",
+                  icon: Icons.login,
                   color: Colors.pink,
-                  onTap: () {
-                    Provider.of<DatabaseService>(context, listen: false).setRole('guardian');
-                    Navigator.pushNamed(context, '/register_guardian');
-                  },
+                  onTap: () => Navigator.pushNamed(context, '/login'),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 14),
 
-                // Role Card 3: Emergency Responder
                 _RoleCard(
-                  title: "Emergency Responder",
-                  subtitle: "Police & Dispatchers managing live critical SOS cases and dispatch",
+                  title: "Emergency Responder (Officer)",
+                  subtitle: "Admin-provisioned police & responder portal for SOS and cyber cases",
                   icon: Icons.local_police,
                   color: Colors.blue.shade800,
-                  onTap: () {
-                    Provider.of<DatabaseService>(context, listen: false).setRole('responder');
-                    Navigator.pushNamed(context, '/register_responder');
-                  },
+                  onTap: () => Navigator.pushNamed(context, '/login'),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 14),
 
-                // Role Card 4: Admin
                 _RoleCard(
-                  title: "She Shield Admin",
-                  subtitle: "System control, audit logs, cyber complaints & threat analytics",
+                  title: "She Shield Admin Command",
+                  subtitle: "Administrator portal for RBAC, officer provisioning & security audit logs",
                   icon: Icons.admin_panel_settings,
                   color: Colors.deepPurple.shade900,
-                  onTap: () {
-                    Provider.of<DatabaseService>(context, listen: false).setRole('admin');
-                    Navigator.pushNamed(context, '/admin_login');
-                  },
+                  onTap: () => Navigator.pushNamed(context, '/login'),
                 ),
 
-                const SizedBox(height: 28),
+                const SizedBox(height: 24),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -276,18 +370,65 @@ class _RoleCard extends StatelessWidget {
   }
 }
 
-// Login Screen
+// Secure Database-Backed Login Screen
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  final String? initialMessage;
+  const LoginScreen({super.key, this.initialMessage});
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _emailController = TextEditingController(text: "tisha@gmail.com");
-  final _passwordController = TextEditingController(text: "password123");
-  String _selectedRole = 'user';
+  final _formKey = GlobalKey<FormState>();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+
+  bool _obscurePassword = true;
+  bool _isLoading = false;
+  String? _errorMessage;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submitLogin() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    final db = Provider.of<DatabaseService>(context, listen: false);
+    final res = await db.authenticateWithCredentials(
+      email: _emailController.text.trim(),
+      password: _passwordController.text,
+    );
+
+    if (!mounted) return;
+    setState(() {
+      _isLoading = false;
+    });
+
+    if (res.success) {
+      final targetRoute = db.homeRouteForRole;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Signed in as ${db.userName} (${db.currentRole})"),
+          backgroundColor: Colors.green.shade700,
+        ),
+      );
+      Navigator.pushNamedAndRemoveUntil(context, targetRoute, (_) => false);
+    } else {
+      setState(() {
+        _errorMessage = res.error ?? 'Authentication failed. Check your credentials.';
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -296,93 +437,161 @@ class _LoginScreenState extends State<LoginScreen> {
         title: const Text("Sign In"),
         backgroundColor: Colors.purple.shade700,
         foregroundColor: Colors.white,
+        actions: [
+          Consumer<DatabaseService>(
+            builder: (ctx, db, _) => IconButton(
+              tooltip: 'Configure Local SQLite Server IP',
+              icon: Icon(
+                Icons.dns_outlined,
+                color: db.isDatabaseLive ? Colors.greenAccent : Colors.amberAccent,
+              ),
+              onPressed: () => showLocalServerConfigDialog(ctx, db),
+            ),
+          ),
+        ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24.0),
-        child: GlassCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Icon(Icons.lock_person, size: 48, color: Colors.purple.shade700),
-              const SizedBox(height: 16),
-              const Text(
-                "Welcome Back",
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                "Access your SHE SHIELD Account",
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey.shade600),
-              ),
-              const SizedBox(height: 24),
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24.0),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 480),
+            child: GlassCard(
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Icon(Icons.lock_person, size: 48, color: Colors.purple.shade700),
+                    const SizedBox(height: 12),
+                    const Text(
+                      "Welcome Back",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      "Sign in with your SQLite-verified account. Your role dashboard is assigned automatically by the server.",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                    ),
+                    const SizedBox(height: 20),
 
-              DropdownButtonFormField<String>(
-                initialValue: _selectedRole,
-                decoration: const InputDecoration(
-                  labelText: "Login Role",
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.badge),
+                    if (widget.initialMessage != null && _errorMessage == null) ...[
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.shade50,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.amber.shade300),
+                        ),
+                        child: Text(
+                          widget.initialMessage!,
+                          style: TextStyle(fontSize: 12, color: Colors.amber.shade900, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+
+                    if (_errorMessage != null) ...[
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.red.shade50,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.red.shade300),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.error_outline, color: Colors.red, size: 20),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _errorMessage!,
+                                style: TextStyle(fontSize: 12, color: Colors.red.shade900, fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+
+                    TextFormField(
+                      controller: _emailController,
+                      keyboardType: TextInputType.emailAddress,
+                      decoration: const InputDecoration(
+                        labelText: "Email Address",
+                        hintText: "you@example.com",
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.email),
+                      ),
+                      validator: (val) {
+                        if (val == null || val.trim().isEmpty) return 'Email address is required';
+                        if (!_isValidEmail(val)) return 'Enter a valid email address';
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 16),
+
+                    TextFormField(
+                      controller: _passwordController,
+                      obscureText: _obscurePassword,
+                      decoration: InputDecoration(
+                        labelText: "Password",
+                        border: const OutlineInputBorder(),
+                        prefixIcon: const Icon(Icons.lock),
+                        suffixIcon: IconButton(
+                          icon: Icon(_obscurePassword ? Icons.visibility : Icons.visibility_off),
+                          onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                        ),
+                      ),
+                      validator: (val) {
+                        if (val == null || val.isEmpty) return 'Password is required';
+                        return null;
+                      },
+                      onFieldSubmitted: (_) => _isLoading ? null : _submitLogin(),
+                    ),
+                    const SizedBox(height: 24),
+
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.purple.shade700,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      onPressed: _isLoading ? null : _submitLogin,
+                      child: _isLoading
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                            )
+                          : const Text("Sign In", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text("Need a new user account? ", style: TextStyle(color: Colors.grey.shade700, fontSize: 12)),
+                        GestureDetector(
+                          onTap: () => Navigator.pushReplacementNamed(context, '/register_user'),
+                          child: Text(
+                            "Register",
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.purple.shade800,
+                              decoration: TextDecoration.underline,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-                items: const [
-                  DropdownMenuItem(value: 'user', child: Text("Women User")),
-                  DropdownMenuItem(value: 'guardian', child: Text("Guardian")),
-                  DropdownMenuItem(value: 'responder', child: Text("Emergency Responder")),
-                  DropdownMenuItem(value: 'admin', child: Text("Admin")),
-                ],
-                onChanged: (val) {
-                  if (val != null) setState(() => _selectedRole = val);
-                },
               ),
-              const SizedBox(height: 16),
-
-              TextFormField(
-                controller: _emailController,
-                decoration: const InputDecoration(
-                  labelText: "Email Address",
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.email),
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              TextFormField(
-                controller: _passwordController,
-                obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: "Password",
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.lock),
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.purple.shade700,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                onPressed: () {
-                  final db = Provider.of<DatabaseService>(context, listen: false);
-                  db.setRole(_selectedRole);
-                  db.loginUser(_emailController.text, "tisha");
-
-                  if (_selectedRole == 'user') {
-                    Navigator.pushReplacementNamed(context, '/dashboard');
-                  } else if (_selectedRole == 'guardian') {
-                    Navigator.pushReplacementNamed(context, '/guardian_dashboard');
-                  } else if (_selectedRole == 'responder') {
-                    Navigator.pushReplacementNamed(context, '/responder_dashboard');
-                  } else {
-                    Navigator.pushReplacementNamed(context, '/admin_dashboard');
-                  }
-                },
-                child: const Text("Sign In", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-              ),
-            ],
+            ),
           ),
         ),
       ),
@@ -390,598 +599,470 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 }
 
-// User Registration Screen with Aadhaar, Face Match & Mobile OTP
+// Public Registration Screen (Supports User or Guardian; admin/officer cannot self-register)
 class RegisterUserScreen extends StatefulWidget {
-  const RegisterUserScreen({super.key});
+  final String initialAccountType;
+  final String? inviteToken;
+  final String? shareToken;
+
+  const RegisterUserScreen({
+    super.key,
+    this.initialAccountType = 'registered_user',
+    this.inviteToken,
+    this.shareToken,
+  });
 
   @override
   State<RegisterUserScreen> createState() => _RegisterUserScreenState();
 }
 
 class _RegisterUserScreenState extends State<RegisterUserScreen> {
-  final _nameController = TextEditingController(text: "tisha");
-  final _emailController = TextEditingController(text: "tisha@gmail.com");
-  final _phoneController = TextEditingController(text: "12435578494630");
-  final _passwordController = TextEditingController(text: "password123");
+  final _formKey = GlobalKey<FormState>();
+  final _nameController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _aadhaarController = TextEditingController();
 
-  void _showOtpDialog() {
-    final List<TextEditingController> otpControllers =
-        List.generate(6, (index) => TextEditingController(text: "${[1, 2, 4, 3, 5, 5][index]}"));
+  late String _accountType;
+  bool _obscurePassword = true;
+  bool _isSubmitting = false;
+  bool _aadhaarSubmittedForReview = false;
+  bool _faceCaptureRequested = false;
+  String? _errorMessage;
 
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.phonelink_ring, color: Colors.purple),
-            SizedBox(width: 8),
-            Text("Mobile OTP Verification"),
-          ],
+  @override
+  void initState() {
+    super.initState();
+    _accountType = widget.initialAccountType == 'guardian' ? 'guardian' : 'registered_user';
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _emailController.dispose();
+    _phoneController.dispose();
+    _passwordController.dispose();
+    _aadhaarController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submitRegistration() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() {
+      _isSubmitting = true;
+      _errorMessage = null;
+    });
+
+    final db = Provider.of<DatabaseService>(context, listen: false);
+    final res = await db.registerAccount(
+      fullName: _nameController.text.trim(),
+      email: _emailController.text.trim(),
+      phone: _phoneController.text.trim(),
+      password: _passwordController.text,
+      accountType: _accountType,
+      aadhaarNumber: _aadhaarSubmittedForReview ? _aadhaarController.text.trim() : null,
+      inviteToken: widget.inviteToken,
+      shareToken: widget.shareToken,
+    );
+
+    if (!mounted) return;
+    setState(() {
+      _isSubmitting = false;
+    });
+
+    if (res.success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _accountType == 'guardian'
+                ? "Guardian account created! Redirecting to Guardian Dashboard..."
+                : "Account registered & secured in SQLite! Welcome to SHE SHIELD.",
+          ),
+          backgroundColor: Colors.green,
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              "Enter 6-digit code sent to ${_phoneController.text}:",
-              style: const TextStyle(fontSize: 13),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: List.generate(
-                6,
-                (i) => SizedBox(
-                  width: 38,
-                  child: TextField(
-                    controller: otpControllers[i],
-                    textAlign: TextAlign.center,
-                    keyboardType: TextInputType.number,
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                    decoration: InputDecoration(
-                      contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+      );
+      Navigator.pushNamedAndRemoveUntil(context, db.homeRouteForRole, (_) => false);
+    } else {
+      setState(() {
+        _errorMessage = res.error ?? 'Registration failed. Please check your details.';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final pw = _passwordController.text;
+    final strength = _passwordStrengthScore(pw);
+    final strengthColor = strength <= 0.4
+        ? Colors.red
+        : (strength < 1.0 ? Colors.orange : Colors.green);
+    final strengthLabel = strength <= 0.4
+        ? 'Weak'
+        : (strength < 1.0 ? 'Moderate' : 'Strong');
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(_accountType == 'guardian' ? "Guardian Registration" : "User Registration"),
+        backgroundColor: _accountType == 'guardian' ? Colors.teal.shade800 : Colors.purple.shade700,
+        foregroundColor: Colors.white,
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20.0),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 620),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  GlassCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          "Create Safety Profile",
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: _accountType == 'guardian' ? Colors.teal.shade900 : Colors.purple.shade900,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          "Select whether you are registering as a Safety User or a Trusted Guardian.",
+                          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ChoiceChip(
+                                selected: _accountType == 'registered_user',
+                                selectedColor: Colors.purple.shade100,
+                                avatar: Icon(Icons.person_outline, size: 18, color: Colors.purple.shade800),
+                                label: const Text("Safety User"),
+                                onSelected: (_) => setState(() => _accountType = 'registered_user'),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: ChoiceChip(
+                                selected: _accountType == 'guardian',
+                                selectedColor: Colors.teal.shade100,
+                                avatar: Icon(Icons.shield_outlined, size: 18, color: Colors.teal.shade800),
+                                label: const Text("Guardian"),
+                                onSelected: (_) => setState(() => _accountType = 'guardian'),
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (widget.inviteToken != null || widget.shareToken != null) ...[
+                          const SizedBox(height: 10),
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: Colors.teal.shade50,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: Colors.teal.shade300),
+                            ),
+                            child: Text(
+                              widget.shareToken != null
+                                  ? "Complete Guardian registration to view this shared live journey inside your Guardian Dashboard."
+                                  : "Complete Guardian registration to accept this guardian invitation automatically.",
+                              style: TextStyle(fontSize: 12, color: Colors.teal.shade900, fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 16),
+
+                        if (_errorMessage != null) ...[
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.red.shade50,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: Colors.red.shade300),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.error_outline, color: Colors.red, size: 20),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    _errorMessage!,
+                                    style: TextStyle(fontSize: 12, color: Colors.red.shade900, fontWeight: FontWeight.w600),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                        ],
+
+                        TextFormField(
+                          controller: _nameController,
+                          decoration: const InputDecoration(
+                            labelText: "Full Name",
+                            hintText: "Enter your full name",
+                            border: OutlineInputBorder(),
+                            prefixIcon: Icon(Icons.person),
+                          ),
+                          validator: (val) {
+                            final v = (val ?? '').trim();
+                            if (v.length < 2) return 'Full Name must be at least 2 characters';
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 12),
+
+                        TextFormField(
+                          controller: _emailController,
+                          keyboardType: TextInputType.emailAddress,
+                          decoration: const InputDecoration(
+                            labelText: "Email Address",
+                            hintText: "you@example.com",
+                            border: OutlineInputBorder(),
+                            prefixIcon: Icon(Icons.email),
+                          ),
+                          validator: (val) {
+                            if (val == null || val.trim().isEmpty) return 'Email Address is required';
+                            if (!_isValidEmail(val)) return 'Enter a valid email address';
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 12),
+
+                        TextFormField(
+                          controller: _phoneController,
+                          keyboardType: TextInputType.phone,
+                          decoration: const InputDecoration(
+                            labelText: "Phone Number",
+                            hintText: "+91 98765 43210",
+                            border: OutlineInputBorder(),
+                            prefixIcon: Icon(Icons.phone),
+                          ),
+                          validator: (val) {
+                            final digits = (val ?? '').replaceAll(RegExp(r'\D'), '');
+                            if (digits.length < 10 || digits.length > 15) {
+                              return 'Enter a valid 10 to 15 digit phone number';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 12),
+
+                        TextFormField(
+                          controller: _passwordController,
+                          obscureText: _obscurePassword,
+                          onChanged: (_) => setState(() {}),
+                          decoration: InputDecoration(
+                            labelText: "Password",
+                            hintText: "Min 8 chars, upper, lower, number & symbol",
+                            border: const OutlineInputBorder(),
+                            prefixIcon: const Icon(Icons.lock),
+                            suffixIcon: IconButton(
+                              icon: Icon(_obscurePassword ? Icons.visibility : Icons.visibility_off),
+                              onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                            ),
+                          ),
+                          validator: (val) => _validateStrongPassword(val ?? ''),
+                        ),
+                        if (pw.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: LinearProgressIndicator(
+                                  value: strength,
+                                  color: strengthColor,
+                                  backgroundColor: Colors.grey.shade200,
+                                  minHeight: 6,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Text(
+                                strengthLabel,
+                                style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: strengthColor),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ],
                     ),
                   ),
-                ),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Cancel"),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.purple.shade700, foregroundColor: Colors.white),
-            onPressed: () {
-              Provider.of<DatabaseService>(context, listen: false).verifyOtp();
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text("Mobile OTP Verified Successfully! (6-Digit OTP Matched)"),
-                  backgroundColor: Colors.green,
-                ),
-              );
-            },
-            child: const Text("Verify OTP"),
-          ),
-        ],
-      ),
-    );
-  }
+                  const SizedBox(height: 16),
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("User Registration"),
-        backgroundColor: Colors.purple.shade700,
-        foregroundColor: Colors.white,
-      ),
-      body: Consumer<DatabaseService>(
-        builder: (context, db, _) {
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(20.0),
-            child: Column(
-              children: [
-                GlassCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text(
-                        "Create Safety Profile",
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.purple.shade900,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-
-                      TextFormField(
-                        controller: _nameController,
-                        decoration: const InputDecoration(
-                          labelText: "Full Name",
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.person),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-
-                      TextFormField(
-                        controller: _emailController,
-                        decoration: const InputDecoration(
-                          labelText: "Email Address",
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.email),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-
-                      TextFormField(
-                        controller: _phoneController,
-                        decoration: const InputDecoration(
-                          labelText: "Phone Number",
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.phone),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-
-                      TextFormField(
-                        controller: _passwordController,
-                        obscureText: true,
-                        decoration: const InputDecoration(
-                          labelText: "Password",
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.lock),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                // Aadhaar Verification Card
-                GlassCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(Icons.badge, color: Colors.blue.shade700),
-                          const SizedBox(width: 8),
-                          const Text(
-                            "Aadhaar Identity Verification",
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      if (db.aadhaarVerified)
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.green.shade50,
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: Colors.green.shade300),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.check_circle, color: Colors.green),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  "Aadhaar Card Verified: 9845-XXXX-1234",
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.green.shade900,
-                                  ),
-                                ),
+                  // Aadhaar Identity Verification Card (Honest Verification State)
+                  GlassCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.badge, color: Colors.blue.shade700),
+                            const SizedBox(width: 8),
+                            const Expanded(
+                              child: Text(
+                                "Aadhaar Identity Verification",
+                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                               ),
-                            ],
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: Colors.orange.shade50,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.orange.shade300),
+                              ),
+                              child: Text(
+                                _aadhaarSubmittedForReview ? "Pending KYC" : "Not Verified",
+                                style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.orange.shade900),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: _aadhaarController,
+                          keyboardType: TextInputType.number,
+                          maxLength: 12,
+                          decoration: const InputDecoration(
+                            labelText: "12-Digit Aadhaar Number (Optional KYC)",
+                            hintText: "Validated by Verhoeff checksum (requires official UIDAI verification)",
+                            border: OutlineInputBorder(),
+                            counterText: '',
                           ),
-                        )
-                      else
+                          validator: (val) {
+                            final v = (val ?? '').trim();
+                            if (v.isEmpty) return null;
+                            if (!_verhoeffCheck(v)) {
+                              return 'Invalid 12-digit Aadhaar checksum';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 10),
                         OutlinedButton.icon(
                           style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
                           ),
                           icon: const Icon(Icons.upload_file),
-                          label: const Text("Upload Aadhaar ID Document"),
+                          label: Text(
+                            _aadhaarSubmittedForReview
+                                ? "Queued for UIDAI / Admin KYC Verification"
+                                : "Submit Aadhaar for Pending KYC Review",
+                          ),
                           onPressed: () {
-                            db.verifyAadhaar();
+                            final v = _aadhaarController.text.trim();
+                            if (v.isEmpty || !_verhoeffCheck(v)) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text("Enter a valid 12-digit Aadhaar number first (Verhoeff checksum)."),
+                                  backgroundColor: Colors.redAccent,
+                                ),
+                              );
+                              return;
+                            }
+                            setState(() => _aadhaarSubmittedForReview = true);
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
-                                content: Text("Aadhaar Document Processed & Verified!"),
-                                backgroundColor: Colors.green,
+                                content: Text("Aadhaar reference queued. Status remains Pending Verification until verified."),
                               ),
                             );
                           },
                         ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(height: 16),
+                  const SizedBox(height: 16),
 
-                // Face Biometrics Card
-                GlassCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(Icons.face_retouching_natural, color: Colors.purple.shade700),
-                          const SizedBox(width: 8),
-                          const Text(
-                            "Live Face Biometrics",
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      if (db.faceVerified)
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.green.shade50,
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: Colors.green.shade300),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.verified, color: Colors.green),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  "Face Biometrics Match: 94.6% (Verified)",
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.green.shade900,
-                                  ),
-                                ),
+                  // Face Biometrics Card (Honest Verification State)
+                  GlassCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.face_retouching_natural, color: Colors.purple.shade700),
+                            const SizedBox(width: 8),
+                            const Expanded(
+                              child: Text(
+                                "Live Face Biometrics",
+                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                               ),
-                            ],
-                          ),
-                        )
-                      else
-                        ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.purple.shade600,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                          ),
-                          icon: const Icon(Icons.camera_alt),
-                          label: const Text("Capture Live Camera Face Biometrics"),
-                          onPressed: () {
-                            db.verifyFace();
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text("Face Match Score: 94.6% (Verified)"),
-                                backgroundColor: Colors.green,
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: Colors.orange.shade50,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.orange.shade300),
                               ),
-                            );
-                          },
+                              child: Text(
+                                _faceCaptureRequested ? "Pending Enrollment" : "Not Verified",
+                                style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.orange.shade900),
+                              ),
+                            ),
+                          ],
                         ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                // Mobile OTP Verification Card
-                GlassCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(Icons.smartphone, color: Colors.orange.shade800),
-                          const SizedBox(width: 8),
-                          const Text(
-                            "Mobile OTP Verification",
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      if (db.otpVerified)
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.green.shade50,
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: Colors.green.shade300),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.mark_email_read, color: Colors.green),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  "Phone Verified via 6-Digit OTP",
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.green.shade900,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        )
-                      else
+                        const SizedBox(height: 10),
+                        Text(
+                          "Biometric face matching requires live camera enrollment and liveness verification (cannot be marked verified statically).",
+                          style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+                        ),
+                        const SizedBox(height: 12),
                         OutlinedButton.icon(
                           style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            side: BorderSide(color: Colors.orange.shade800),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
                           ),
-                          icon: Icon(Icons.sms, color: Colors.orange.shade800),
+                          icon: const Icon(Icons.camera_alt),
                           label: Text(
-                            "Send & Verify Mobile OTP",
-                            style: TextStyle(color: Colors.orange.shade900, fontWeight: FontWeight.bold),
+                            _faceCaptureRequested
+                                ? "Enrollment Requested (Pending Biometric Check)"
+                                : "Request Live Face Biometrics Enrollment",
                           ),
-                          onPressed: _showOtpDialog,
+                          onPressed: () {
+                            setState(() => _faceCaptureRequested = true);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text("Biometric enrollment flagged as Pending Verification."),
+                              ),
+                            );
+                          },
                         ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(height: 24),
+                  const SizedBox(height: 24),
 
-                // Complete Registration Button
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.purple.shade800,
-                    foregroundColor: Colors.white,
-                    minimumSize: const Size(double.infinity, 54),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  // Complete Registration Button
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.purple.shade800,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size(double.infinity, 54),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                    onPressed: _isSubmitting ? null : _submitRegistration,
+                    child: _isSubmitting
+                        ? const SizedBox(
+                            height: 22,
+                            width: 22,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          )
+                        : const Text(
+                            "Complete Registration & Enter Dashboard",
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          ),
                   ),
-                  onPressed: () {
-                    db.loginUser(_emailController.text, _nameController.text);
-                    Navigator.pushReplacementNamed(context, '/dashboard');
-                  },
-                  child: const Text(
-                    "Complete Registration & Enter Dashboard",
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                ),
-                const SizedBox(height: 20),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
-}
-
-// Guardian Registration Screen
-class RegisterGuardianScreen extends StatefulWidget {
-  const RegisterGuardianScreen({super.key});
-
-  @override
-  State<RegisterGuardianScreen> createState() => _RegisterGuardianScreenState();
-}
-
-class _RegisterGuardianScreenState extends State<RegisterGuardianScreen> {
-  final _nameController = TextEditingController(text: "Guardian User");
-  final _emailController = TextEditingController(text: "guardian@gmail.com");
-  final _phoneController = TextEditingController(text: "9876543210");
-  String _relation = "Mother";
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("Register Guardian"),
-        backgroundColor: Colors.pink.shade700,
-        foregroundColor: Colors.white,
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: GlassCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Icon(Icons.family_restroom, size: 48, color: Colors.pink.shade700),
-              const SizedBox(height: 12),
-              const Text(
-                "Guardian Network Registration",
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _nameController,
-                decoration: const InputDecoration(labelText: "Guardian Full Name", border: OutlineInputBorder()),
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _emailController,
-                decoration: const InputDecoration(labelText: "Guardian Email", border: OutlineInputBorder()),
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _phoneController,
-                decoration: const InputDecoration(labelText: "Phone Number", border: OutlineInputBorder()),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                initialValue: _relation,
-                decoration: const InputDecoration(labelText: "Relationship to User", border: OutlineInputBorder()),
-                items: const [
-                  DropdownMenuItem(value: "Mother", child: Text("Mother")),
-                  DropdownMenuItem(value: "Father", child: Text("Father")),
-                  DropdownMenuItem(value: "Spouse", child: Text("Spouse")),
-                  DropdownMenuItem(value: "Sister", child: Text("Sister")),
-                  DropdownMenuItem(value: "Friend", child: Text("Friend")),
-                  DropdownMenuItem(value: "Other", child: Text("Other")),
+                  const SizedBox(height: 20),
                 ],
-                onChanged: (val) {
-                  if (val != null) setState(() => _relation = val);
-                },
               ),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.pink.shade700,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                ),
-                onPressed: () {
-                  final db = Provider.of<DatabaseService>(context, listen: false);
-                  db.setRole('guardian');
-                  db.loginUser(_emailController.text, _nameController.text);
-                  Navigator.pushReplacementNamed(context, '/guardian_dashboard');
-                },
-                child: const Text("Register as Guardian"),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// Emergency Responder Registration Screen
-class RegisterResponderScreen extends StatefulWidget {
-  const RegisterResponderScreen({super.key});
-
-  @override
-  State<RegisterResponderScreen> createState() => _RegisterResponderScreenState();
-}
-
-class _RegisterResponderScreenState extends State<RegisterResponderScreen> {
-  final _nameController = TextEditingController(text: "Inspector Vikram");
-  final _emailController = TextEditingController(text: "vikram@police.gov.in");
-  final _badgeController = TextEditingController(text: "POLICE-GJ-8842");
-  final _stationController = TextEditingController(text: "Navrangpura Police Station");
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("Responder Portal Registration"),
-        backgroundColor: Colors.blue.shade900,
-        foregroundColor: Colors.white,
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: GlassCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Icon(Icons.local_police, size: 48, color: Colors.blue.shade900),
-              const SizedBox(height: 12),
-              const Text(
-                "Official Police / First Responder Registration",
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _nameController,
-                decoration: const InputDecoration(labelText: "Officer Name", border: OutlineInputBorder()),
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _emailController,
-                decoration: const InputDecoration(labelText: "Official Email Address", border: OutlineInputBorder()),
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _badgeController,
-                decoration: const InputDecoration(labelText: "Badge ID / Service Reg Number", border: OutlineInputBorder()),
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _stationController,
-                decoration: const InputDecoration(labelText: "Police Station / Mobile Unit Location", border: OutlineInputBorder()),
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue.shade900,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                ),
-                onPressed: () {
-                  final db = Provider.of<DatabaseService>(context, listen: false);
-                  db.setRole('responder');
-                  db.loginUser(_emailController.text, _nameController.text);
-                  Navigator.pushReplacementNamed(context, '/responder_dashboard');
-                },
-                child: const Text("Register Officer Profile"),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// Admin Login Screen
-class AdminLoginScreen extends StatefulWidget {
-  const AdminLoginScreen({super.key});
-
-  @override
-  State<AdminLoginScreen> createState() => _AdminLoginScreenState();
-}
-
-class _AdminLoginScreenState extends State<AdminLoginScreen> {
-  final _adminKeyController = TextEditingController(text: "ADMIN-SHE-SHIELD-KEY-99");
-  final _passwordController = TextEditingController(text: "adminpass");
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("Admin Security Portal"),
-        backgroundColor: Colors.deepPurple.shade900,
-        foregroundColor: Colors.white,
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: GlassCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Icon(Icons.admin_panel_settings, size: 52, color: Colors.deepPurple.shade900),
-              const SizedBox(height: 12),
-              const Text(
-                "She Shield System Admin Login",
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _adminKeyController,
-                decoration: const InputDecoration(labelText: "Admin Passcode / Master Security Token", border: OutlineInputBorder()),
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _passwordController,
-                obscureText: true,
-                decoration: const InputDecoration(labelText: "Master Password", border: OutlineInputBorder()),
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.deepPurple.shade900,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                ),
-                onPressed: () {
-                  final db = Provider.of<DatabaseService>(context, listen: false);
-                  db.setRole('admin');
-                  db.loginUser("admin@sheshield.gov.in", "System Admin");
-                  Navigator.pushReplacementNamed(context, '/admin_dashboard');
-                },
-                child: const Text("Authorize Admin Access"),
-              ),
-            ],
+            ),
           ),
         ),
       ),

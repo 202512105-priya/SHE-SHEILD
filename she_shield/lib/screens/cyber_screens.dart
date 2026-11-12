@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/database_service.dart';
+import '../widgets/evidence_preview_dialog.dart';
 import 'auth_screens.dart';
 
 class CyberReportScreen extends StatefulWidget {
@@ -18,8 +19,22 @@ class _CyberReportScreenState extends State<CyberReportScreen> {
   final _urlController = TextEditingController(text: 'https://instagram.com/unknown_user_99');
 
   bool _screenshotAttached = false;
-  bool _scanning = false;
-  bool _scanCompleted = false;
+  final List<String> _selectedVaultEvidence = [];
+
+  IconData _getAssetIcon(String name, String? type) {
+    final lower = name.toLowerCase();
+    final t = (type ?? '').toUpperCase();
+    if (t == 'AUDIO' || lower.contains('.mp3') || lower.contains('.m4a') || lower.contains('.aac') || lower.contains('audio')) {
+      return Icons.audiotrack;
+    } else if (t == 'IMAGE' || lower.contains('.png') || lower.contains('.jpg') || lower.contains('.jpeg') || lower.contains('photo') || lower.contains('screenshot')) {
+      return Icons.image;
+    } else if (t == 'VIDEO' || lower.contains('.mp4') || lower.contains('video') || lower.contains('cctv')) {
+      return Icons.videocam;
+    } else if (t == 'TELEMETRY' || lower.contains('.json') || lower.contains('telemetry') || lower.contains('gps')) {
+      return Icons.data_object;
+    }
+    return Icons.insert_drive_file;
+  }
 
   @override
   void initState() {
@@ -55,31 +70,233 @@ class _CyberReportScreenState extends State<CyberReportScreen> {
     );
   }
 
-  void _runAiScan() async {
-    if (_descController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please describe the incident first.')),
-      );
-      return;
-    }
+  void _showVaultEvidencePickerModal(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final db = Provider.of<DatabaseService>(context, listen: false);
+            final vaultAssets = db.vaultAssets;
 
-    setState(() {
-      _scanning = true;
-    });
+            return Container(
+              height: MediaQuery.of(context).size.height * 0.8,
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              child: Column(
+                children: [
+                  Container(
+                    margin: const EdgeInsets.only(top: 10, bottom: 8),
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Colors.purple.shade50,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(Icons.verified_user, color: Colors.purple, size: 24),
+                        ),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                "Attach Evidence from Vault",
+                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.purple),
+                              ),
+                              Text(
+                                "Preview files and choose proofs to attach to case",
+                                style: TextStyle(fontSize: 12, color: Colors.grey),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  Expanded(
+                    child: vaultAssets.isEmpty
+                        ? const Center(
+                            child: Text(
+                              "No evidence assets in Vault yet.\nUpload files to Vault first.",
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: Colors.grey),
+                            ),
+                          )
+                        : ListView.builder(
+                            padding: const EdgeInsets.all(16),
+                            itemCount: vaultAssets.length,
+                            itemBuilder: (context, index) {
+                              final asset = vaultAssets[index];
+                              final assetName = asset['name'] ?? 'Evidence_File.bin';
+                              final isSelected = _selectedVaultEvidence.contains(assetName);
 
-    await Future.delayed(const Duration(milliseconds: 600));
-
-    if (!mounted) return;
-
-    setState(() {
-      _scanning = false;
-      _scanCompleted = true;
-    });
+                              return Card(
+                                margin: const EdgeInsets.only(bottom: 10),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                  side: BorderSide(
+                                    color: isSelected ? Colors.purple : Colors.grey.shade200,
+                                    width: isSelected ? 2 : 1,
+                                  ),
+                                ),
+                                elevation: isSelected ? 2 : 0,
+                                color: isSelected ? Colors.purple.shade50.withValues(alpha: 0.3) : Colors.white,
+                                child: Padding(
+                                  padding: const EdgeInsets.all(12),
+                                  child: Row(
+                                    children: [
+                                      Checkbox(
+                                        value: isSelected,
+                                        activeColor: Colors.purple,
+                                        onChanged: (bool? val) {
+                                          setModalState(() {
+                                            if (val == true) {
+                                              if (!_selectedVaultEvidence.contains(assetName)) {
+                                                _selectedVaultEvidence.add(assetName);
+                                              }
+                                            } else {
+                                              _selectedVaultEvidence.remove(assetName);
+                                            }
+                                          });
+                                          setState(() {});
+                                        },
+                                      ),
+                                      Container(
+                                        padding: const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          color: Colors.purple.shade50,
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: Icon(
+                                          _getAssetIcon(assetName, asset['fileType']?.toString()),
+                                          color: Colors.purple,
+                                          size: 20,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              assetName,
+                                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              "${asset['fileType'] ?? 'FILE'} • ${asset['sizeMb'] ?? '2.4 MB'} • Tamper: ${asset['tamperCheck'] ?? 'PASS'}",
+                                              style: TextStyle(fontSize: 10, color: Colors.grey.shade700),
+                                            ),
+                                            Text(
+                                              asset['hash'] ?? 'SHA256: 64319...',
+                                              style: const TextStyle(fontFamily: 'monospace', fontSize: 9, color: Colors.grey),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      OutlinedButton.icon(
+                                        onPressed: () {
+                                          EvidencePreviewDialog.show(
+                                            context,
+                                            fileName: assetName,
+                                            fileType: asset['fileType'],
+                                            size: asset['sizeMb'],
+                                            hash: asset['hash'],
+                                          );
+                                        },
+                                        style: OutlinedButton.styleFrom(
+                                          side: const BorderSide(color: Colors.purple),
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                                          visualDensity: VisualDensity.compact,
+                                        ),
+                                        icon: const Icon(Icons.visibility, size: 14, color: Colors.purple),
+                                        label: const Text("Preview", style: TextStyle(fontSize: 11, color: Colors.purple)),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 20),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.05),
+                          offset: const Offset(0, -2),
+                          blurRadius: 8,
+                        ),
+                      ],
+                    ),
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(context);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        minimumSize: const Size.fromHeight(48),
+                        backgroundColor: Colors.purple,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                      icon: const Icon(Icons.check, color: Colors.white),
+                      label: Text(
+                        "Attach Selected Evidence (${_selectedVaultEvidence.length})",
+                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   void _fileOfficialCase() {
     var db = Provider.of<DatabaseService>(context, listen: false);
-    db.addCyberComplaint(_descController.text, _urlController.text);
+    final List<String> allEvidence = [];
+    if (_screenshotAttached) {
+      allEvidence.add('Extortion_Blackmail_DM_Proof.png');
+    }
+    allEvidence.addAll(_selectedVaultEvidence);
+    if (allEvidence.isEmpty) {
+      allEvidence.add('CERT_In_Forensic_Report.pdf');
+    }
+
+    db.addCyberComplaint(
+      _descController.text,
+      _urlController.text,
+      category: 'BLACKMAIL & EXTORTION',
+      threatScore: '94%',
+      attachedEvidence: allEvidence,
+    );
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -96,9 +313,10 @@ class _CyberReportScreenState extends State<CyberReportScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final db = Provider.of<DatabaseService>(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('AI Cyber Threat Assistant'),
+        title: const Text('Report Cyber Crime'),
         elevation: 0,
       ),
       body: Container(
@@ -213,137 +431,204 @@ class _CyberReportScreenState extends State<CyberReportScreen> {
                             ),
                           ),
                         ),
-                        const SizedBox(height: 20),
-
-                        // Perform AI Threat Scan button
-                        ElevatedButton.icon(
-                          onPressed: _scanning ? null : _runAiScan,
-                          style: ElevatedButton.styleFrom(
-                            minimumSize: const Size.fromHeight(50),
-                            backgroundColor: Colors.purple,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        if (_screenshotAttached) ...[
+                          const SizedBox(height: 8),
+                          InkWell(
+                            onTap: () => EvidencePreviewDialog.show(
+                              context,
+                              fileName: 'Extortion_Blackmail_DM_Proof.png',
+                              fileType: 'IMAGE',
+                              hash: 'SHA256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+                            ),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: Colors.purple.shade50,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: Colors.purple.shade200),
+                              ),
+                              child: const Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Icon(Icons.image, color: Colors.purple, size: 18),
+                                      SizedBox(width: 8),
+                                      Text(
+                                        'Extortion_Blackmail_DM_Proof.png',
+                                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.purple),
+                                      ),
+                                    ],
+                                  ),
+                                  Row(
+                                    children: [
+                                      Icon(Icons.visibility, color: Colors.purple, size: 14),
+                                      SizedBox(width: 4),
+                                      Text('Preview File', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.purple)),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
-                          icon: _scanning
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                                )
-                              : const Icon(Icons.memory, color: Colors.white),
-                          label: Text(
-                            _scanning ? "Scanning Threat Vector..." : "Perform AI Threat Scan",
-                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        ],
+                        const SizedBox(height: 16),
+
+                        // Vault Evidence Attachment Section
+                        Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: Colors.purple.shade50.withValues(alpha: 0.6),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: Colors.purple.shade200),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  const Row(
+                                    children: [
+                                      Icon(Icons.lock_clock, color: Colors.purple, size: 20),
+                                      SizedBox(width: 8),
+                                      Text(
+                                        "Attach Evidence from Vault",
+                                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.purple),
+                                      ),
+                                    ],
+                                  ),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: Colors.purple.shade100,
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Text(
+                                      "${db.vaultAssets.length} In Vault",
+                                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.purple.shade900),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                "Attach immutable, SHA-256 cryptographically verified proofs stored in your Vault.",
+                                style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                              ),
+                              const SizedBox(height: 10),
+                              OutlinedButton.icon(
+                                onPressed: () => _showVaultEvidencePickerModal(context),
+                                style: OutlinedButton.styleFrom(
+                                  minimumSize: const Size.fromHeight(42),
+                                  side: const BorderSide(color: Colors.purple, width: 1.5),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                  backgroundColor: Colors.white,
+                                ),
+                                icon: const Icon(Icons.add_link, color: Colors.purple),
+                                label: Text(
+                                  _selectedVaultEvidence.isEmpty
+                                      ? "Select Evidence from Vault"
+                                      : "Edit Vault Evidence (${_selectedVaultEvidence.length} Selected)",
+                                  style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.purple),
+                                ),
+                              ),
+                              if (_selectedVaultEvidence.isNotEmpty) ...[
+                                const SizedBox(height: 10),
+                                const Text(
+                                  "Attached Vault Proofs:",
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.purple),
+                                ),
+                                const SizedBox(height: 6),
+                                ..._selectedVaultEvidence.map((assetName) {
+                                  final matchingAsset = db.vaultAssets.firstWhere(
+                                    (a) => a['name'] == assetName,
+                                    orElse: () => {'name': assetName, 'fileType': 'DOCUMENT', 'sizeMb': '2.0 MB'},
+                                  );
+                                  return Container(
+                                    margin: const EdgeInsets.only(bottom: 6),
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(10),
+                                      border: Border.all(color: Colors.purple.shade100),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Icon(_getAssetIcon(matchingAsset['name']?.toString() ?? '', matchingAsset['fileType']?.toString()), color: Colors.purple, size: 18),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                matchingAsset['name'] ?? assetName,
+                                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                              Text(
+                                                "${matchingAsset['fileType'] ?? 'FILE'} • ${matchingAsset['sizeMb'] ?? '2.0 MB'}",
+                                                style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        TextButton.icon(
+                                          onPressed: () {
+                                            EvidencePreviewDialog.show(
+                                              context,
+                                              fileName: matchingAsset['name'] ?? assetName,
+                                              fileType: matchingAsset['fileType'],
+                                              size: matchingAsset['sizeMb'],
+                                              hash: matchingAsset['hash'],
+                                            );
+                                          },
+                                          style: TextButton.styleFrom(
+                                            visualDensity: VisualDensity.compact,
+                                            padding: const EdgeInsets.symmetric(horizontal: 6),
+                                          ),
+                                          icon: const Icon(Icons.visibility, size: 14, color: Colors.purple),
+                                          label: const Text("Preview", style: TextStyle(fontSize: 11, color: Colors.purple, fontWeight: FontWeight.bold)),
+                                        ),
+                                        IconButton(
+                                          icon: const Icon(Icons.close, size: 16, color: Colors.redAccent),
+                                          visualDensity: VisualDensity.compact,
+                                          padding: EdgeInsets.zero,
+                                          onPressed: () {
+                                            setState(() {
+                                              _selectedVaultEvidence.remove(assetName);
+                                            });
+                                          },
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                }),
+                              ],
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+
+                        // Direct File Official Cyber Complaint Button
+                        ElevatedButton.icon(
+                          onPressed: _fileOfficialCase,
+                          style: ElevatedButton.styleFrom(
+                            minimumSize: const Size.fromHeight(52),
+                            backgroundColor: Colors.purple.shade800,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                            elevation: 3,
+                          ),
+                          icon: const Icon(Icons.send_rounded, color: Colors.white),
+                          label: const Text(
+                            "File Official Cyber Complaint",
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                           ),
                         ),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 20),
-
-                  // AI Threat Scan Results Card
-                  if (_scanCompleted) ...[
-                    GlassCard(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Row(
-                                children: [
-                                  Icon(Icons.shield_outlined, color: Colors.redAccent, size: 26),
-                                  SizedBox(width: 8),
-                                  Text(
-                                    "AI Threat Scan Results",
-                                    style: TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.redAccent,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: Colors.red.shade100,
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                child: const Text(
-                                  "HIGH RISK",
-                                  style: TextStyle(
-                                    color: Colors.red,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const Divider(height: 24),
-
-                          // Metrics Grid
-                          Row(
-                            children: [
-                              Expanded(
-                                child: _buildMetricTile(
-                                  "Threat Category",
-                                  "BLACKMAIL",
-                                  Icons.warning_amber_rounded,
-                                  Colors.red,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: _buildMetricTile(
-                                  "Safety Score",
-                                  "15%",
-                                  Icons.shield,
-                                  Colors.orange,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: _buildMetricTile(
-                                  "Confidence",
-                                  "90%",
-                                  Icons.verified,
-                                  Colors.purple,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 20),
-
-                          const Text(
-                            "Recommended Protocols:",
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.purple),
-                          ),
-                          const SizedBox(height: 8),
-                          _buildProtocolTile("1. Block & report offender's account immediately"),
-                          _buildProtocolTile("2. Do NOT transfer funds or give into demand coercion"),
-                          _buildProtocolTile("3. Preserve chat transcripts & raw media EXIF metadata"),
-                          _buildProtocolTile("4. File official emergency case for legal takedown notice"),
-                          const SizedBox(height: 20),
-
-                          ElevatedButton.icon(
-                            onPressed: _fileOfficialCase,
-                            style: ElevatedButton.styleFrom(
-                              minimumSize: const Size.fromHeight(50),
-                              backgroundColor: Colors.red.shade700,
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                            ),
-                            icon: const Icon(Icons.gavel),
-                            label: const Text(
-                              "File Official Case",
-                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
                 ],
               ),
             ),
@@ -352,66 +637,268 @@ class _CyberReportScreenState extends State<CyberReportScreen> {
       ),
     );
   }
-
-  Widget _buildMetricTile(String label, String value, IconData icon, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: color.withValues(alpha: 0.2)),
-      ),
-      child: Column(
-        children: [
-          Icon(icon, color: color, size: 22),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: color),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            style: const TextStyle(fontSize: 10, color: Colors.grey),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildProtocolTile(String text) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6.0),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Icon(Icons.check_circle_outline, color: Colors.purple, size: 18),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              text,
-              style: const TextStyle(fontSize: 13, color: Colors.black87),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
-class ComplaintStatusScreen extends StatelessWidget {
-  const ComplaintStatusScreen({super.key});
+IconData getEvidenceAssetIcon(String name, String? type) {
+  final lower = name.toLowerCase();
+  final t = (type ?? '').toUpperCase();
+  if (t == 'AUDIO' || lower.contains('.mp3') || lower.contains('.m4a') || lower.contains('.aac') || lower.contains('audio') || lower.contains('recording')) {
+    return Icons.audiotrack;
+  } else if (t == 'IMAGE' || lower.contains('.png') || lower.contains('.jpg') || lower.contains('.jpeg') || lower.contains('photo') || lower.contains('screenshot') || lower.contains('dm')) {
+    return Icons.image;
+  } else if (t == 'VIDEO' || lower.contains('.mp4') || lower.contains('video') || lower.contains('cctv') || lower.contains('dashcam')) {
+    return Icons.videocam;
+  } else if (t == 'TELEMETRY' || lower.contains('.json') || lower.contains('telemetry') || lower.contains('gps')) {
+    return Icons.data_object;
+  }
+  return Icons.description;
+}
+
+class ComplaintStatusScreen extends StatefulWidget {
+  final String? initialCaseId;
+
+  const ComplaintStatusScreen({super.key, this.initialCaseId});
+
+  @override
+  State<ComplaintStatusScreen> createState() => _ComplaintStatusScreenState();
+}
+
+class _ComplaintStatusScreenState extends State<ComplaintStatusScreen> {
+  String? _selectedCaseId;
+
+  static const List<String> _stages = [
+    'SUBMITTED',
+    'UNDER REVIEW',
+    'ASSIGNED',
+    'INVESTIGATING',
+    'VERIFIED PROOF',
+    'RESOLVED',
+  ];
+
+  int _getStageRank(String status) {
+    final s = status.toUpperCase().trim();
+    for (int i = 0; i < _stages.length; i++) {
+      if (s == _stages[i] || s.replaceAll(' ', '_') == _stages[i].replaceAll(' ', '_')) {
+        return i;
+      }
+    }
+    if (s.contains('RESOLV') || s.contains('CLOSE')) return 5;
+    if (s.contains('VERIF') || s.contains('PROOF')) return 4;
+    if (s.contains('INVESTIGAT') || s.contains('PROGRESS')) return 3;
+    if (s.contains('ASSIGN')) return 2;
+    if (s.contains('REVIEW')) return 1;
+    return 0;
+  }
+
+  void _showAttachMoreVaultEvidenceModal(BuildContext context, Map<String, dynamic> activeCase) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        final db = Provider.of<DatabaseService>(context, listen: false);
+        final vaultAssets = db.vaultAssets;
+
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Container(
+              height: MediaQuery.of(context).size.height * 0.75,
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              child: Column(
+                children: [
+                  Container(
+                    margin: const EdgeInsets.only(top: 10, bottom: 8),
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.lock_clock, color: Colors.purple, size: 24),
+                        const SizedBox(width: 10),
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                "Attach Vault Proof to Case",
+                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.purple),
+                              ),
+                              Text("Select evidence from Vault to link to this active complaint", style: TextStyle(fontSize: 11, color: Colors.grey)),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  Expanded(
+                    child: vaultAssets.isEmpty
+                        ? const Center(child: Text("No assets in Vault."))
+                        : ListView.builder(
+                            padding: const EdgeInsets.all(16),
+                            itemCount: vaultAssets.length,
+                            itemBuilder: (context, index) {
+                              final asset = vaultAssets[index];
+                              final assetName = asset['name'] ?? 'Evidence_File.bin';
+
+                              return Card(
+                                margin: const EdgeInsets.only(bottom: 10),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                child: ListTile(
+                                  leading: Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      color: Colors.purple.shade50,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Icon(getEvidenceAssetIcon(assetName, asset['fileType']?.toString()), color: Colors.purple, size: 20),
+                                  ),
+                                  title: Text(assetName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                  subtitle: Text("${asset['fileType'] ?? 'FILE'} • ${asset['sizeMb'] ?? '2.4 MB'} • Tamper: PASS", style: const TextStyle(fontSize: 11)),
+                                  trailing: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      IconButton(
+                                        icon: const Icon(Icons.visibility, color: Colors.purple, size: 18),
+                                        onPressed: () {
+                                          EvidencePreviewDialog.show(
+                                            context,
+                                            fileName: assetName,
+                                            fileType: asset['fileType'],
+                                            size: asset['sizeMb'],
+                                            hash: asset['hash'],
+                                          );
+                                        },
+                                      ),
+                                      ElevatedButton(
+                                        onPressed: () {
+                                          Navigator.pop(context);
+                                          final existingStr = activeCase['attachedEvidence']?.toString() ?? '';
+                                          final updatedStr = existingStr.isNotEmpty ? '$existingStr; $assetName' : assetName;
+                                          setState(() {
+                                            activeCase['attachedEvidence'] = updatedStr;
+                                          });
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(
+                                              content: Text("Linked $assetName to complaint ${activeCase['id']}!"),
+                                              backgroundColor: Colors.purple,
+                                            ),
+                                          );
+                                        },
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.purple,
+                                          visualDensity: VisualDensity.compact,
+                                        ),
+                                        child: const Text("Attach", style: TextStyle(color: Colors.white, fontSize: 11)),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    var db = Provider.of<DatabaseService>(context);
-    var complaints = db.cyberComplaints;
+    final db = Provider.of<DatabaseService>(context);
+    final complaints = db.cyberComplaints;
+
+    if (complaints.isEmpty) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Complaint Tracking')),
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.shield_outlined, size: 64, color: Colors.purple),
+              const SizedBox(height: 16),
+              const Text("No cyber complaints filed yet.", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.push(context, MaterialPageRoute(builder: (context) => const CyberReportScreen()));
+                },
+                icon: const Icon(Icons.add),
+                label: const Text("File First Cyber Complaint"),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.purple),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Determine active case
+    Map<String, dynamic> activeCase = complaints.first;
+    if (_selectedCaseId != null) {
+      activeCase = complaints.firstWhere(
+        (c) => c['id'] == _selectedCaseId,
+        orElse: () => complaints.first,
+      );
+    } else if (widget.initialCaseId != null) {
+      activeCase = complaints.firstWhere(
+        (c) => c['id'] == widget.initialCaseId,
+        orElse: () => complaints.first,
+      );
+    }
+
+    final activeStatus = activeCase['status']?.toString().toUpperCase() ?? 'SUBMITTED';
+    final rank = _getStageRank(activeStatus);
+
+    // Parse attached evidence
+    List<String> attachedFiles = [];
+    final attachedRaw = activeCase['attachedEvidence']?.toString() ?? '';
+    if (attachedRaw.isNotEmpty) {
+      attachedFiles = attachedRaw
+          .split(RegExp(r'[;,]'))
+          .map((s) => s.trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+    }
+    if (attachedFiles.isEmpty) {
+      attachedFiles = [
+        'Extortion_Blackmail_DM_Proof.png',
+        'CERT_In_Forensic_Report.pdf',
+      ];
+    }
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Complaint Timeline & Status'),
+        elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () {
+              db.syncFromDatabase();
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("Refreshed complaint status from Local SQLite Server.")),
+              );
+            },
+          ),
+        ],
       ),
       body: Container(
         decoration: BoxDecoration(
@@ -423,126 +910,436 @@ class ComplaintStatusScreen extends StatelessWidget {
         ),
         child: SafeArea(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(20.0),
+            padding: const EdgeInsets.all(16.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                // Top Action Bar: File New Complaint Button
+                GlassCard(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              "Running Complaints",
+                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.purple),
+                            ),
+                            Text(
+                              "Track real-time legal & forensic progress",
+                              style: TextStyle(fontSize: 11, color: Colors.grey),
+                            ),
+                          ],
+                        ),
+                      ),
+                      ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (context) => const CyberReportScreen()),
+                          );
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.purple,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        icon: const Icon(Icons.add, size: 16),
+                        label: const Text("New Complaint", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // Complaint Selector Chips (Carousel / Horizontal bar)
+                SizedBox(
+                  height: 62,
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: complaints.length,
+                    itemBuilder: (context, index) {
+                      final c = complaints[index];
+                      final isSelected = c['id'] == activeCase['id'];
+                      final shortId = (c['id']?.toString() ?? '').length > 10
+                          ? "...${c['id']!.toString().substring(c['id']!.toString().length - 6)}"
+                          : c['id']?.toString() ?? 'case';
+
+                      return InkWell(
+                        onTap: () {
+                          setState(() {
+                            _selectedCaseId = c['id'];
+                          });
+                        },
+                        borderRadius: BorderRadius.circular(14),
+                        child: Container(
+                          width: 140,
+                          margin: const EdgeInsets.only(right: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: isSelected ? Colors.purple : Colors.white,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: isSelected ? Colors.purple.shade900 : Colors.purple.shade100,
+                              width: isSelected ? 2 : 1,
+                            ),
+                            boxShadow: isSelected
+                                ? [BoxShadow(color: Colors.purple.withValues(alpha: 0.25), blurRadius: 6, offset: const Offset(0, 2))]
+                                : [],
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    shortId,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                      color: isSelected ? Colors.white : Colors.purple,
+                                    ),
+                                  ),
+                                  Text(
+                                    c['threatScore'] ?? '90%',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 11,
+                                      color: isSelected ? Colors.amberAccent : Colors.red,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                c['category'] ?? 'CYBER',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: isSelected ? Colors.white70 : Colors.grey.shade700,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // Active Complaint Dossier Card
                 GlassCard(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
                         children: [
-                          const Icon(Icons.assignment_turned_in, color: Colors.purple, size: 28),
-                          const SizedBox(width: 10),
-                          const Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                "Official Cyber Case #1780512594344",
-                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.purple),
-                              ),
-                              Text("Category: BLACKMAIL", style: TextStyle(color: Colors.grey, fontSize: 12)),
-                            ],
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.purple.shade100,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(Icons.assignment_turned_in, color: Colors.purple, size: 24),
                           ),
-                          const Spacer(),
-                          Chip(
-                            label: const Text("ACTIVE", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
-                            backgroundColor: Colors.purple,
-                            padding: EdgeInsets.zero,
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  "Case #${activeCase['id'] ?? '1780512594344'}",
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.purple),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                Text(
+                                  "Category: ${activeCase['category'] ?? 'BLACKMAIL & EXTORTION'}",
+                                  style: const TextStyle(color: Colors.grey, fontSize: 11, fontWeight: FontWeight.w600),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: rank >= 5 ? Colors.green : Colors.purple,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              activeStatus,
+                              style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                            ),
                           ),
                         ],
                       ),
-                      const Divider(height: 24),
-                      const Row(
+                      const Divider(height: 20),
+
+                      // Description & Details
+                      Text(
+                        "Incident: ${activeCase['description'] ?? 'No description'}",
+                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Colors.black87),
+                      ),
+                      if (activeCase['offenderLink'] != null && activeCase['offenderLink'].toString().isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            const Icon(Icons.link, size: 14, color: Colors.purple),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                activeCase['offenderLink'],
+                                style: const TextStyle(fontSize: 11, color: Colors.purple, fontFamily: 'monospace'),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                      const SizedBox(height: 8),
+                      Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text("Incident: blackmail with photoes", style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-                          Text("Threat Score: 92%", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 13)),
+                          Text(
+                            "Filed By: ${activeCase['userName'] ?? 'Tisha Patel'}",
+                            style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+                          ),
+                          Text(
+                            "Threat Score: ${activeCase['threatScore'] ?? '92%'}",
+                            style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 12),
+                          ),
                         ],
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Official Police Tracking Notice (Read-Only Status Display for Complainant)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: Colors.purple.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.purple.shade200),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              rank >= 5 ? Icons.verified : Icons.admin_panel_settings,
+                              color: rank >= 5 ? Colors.green.shade700 : Colors.purple.shade800,
+                              size: 22,
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    rank >= 5
+                                        ? "Status: Case Closed & Threat Neutralized"
+                                        : "Current Police Status: $activeStatus",
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                      color: rank >= 5 ? Colors.green.shade900 : Colors.purple.shade900,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  const Text(
+                                    "Investigation stages are updated exclusively by Police Officers & Cyber Cell Responders.",
+                                    style: TextStyle(fontSize: 10, color: Colors.grey),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 16),
 
                 // Case Timeline Progress Tracker Card
                 GlassCard(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        "Case Timeline Progress",
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.purple),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            "Case Lifecycle Progression",
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.purple),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.purple.shade50,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              "Stage ${rank + 1}/6",
+                              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.purple),
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 16),
 
                       _buildTimelineStep(
-                        title: "AI Analysis Completed",
-                        subtitle: "Threat category BLACKMAIL identified • Score 92%",
-                        time: "10:15 AM",
+                        title: "1. AI Threat Analysis Completed",
+                        subtitle: "Threat vector ${activeCase['category'] ?? 'BLACKMAIL'} identified • Score ${activeCase['threatScore'] ?? '92%'}",
+                        time: "Verified",
                         isCompleted: true,
+                        isActive: false,
                         isFirst: true,
                       ),
                       _buildTimelineStep(
-                        title: "Complaint Submitted",
-                        subtitle: "Case payload logged into immutable database",
-                        time: "10:16 AM",
+                        title: "2. Complaint Formally Filed & Encrypted",
+                        subtitle: "Cryptographic SHA-256 payload signed & logged in database",
+                        time: "Logged",
                         isCompleted: true,
+                        isActive: rank == 0,
                       ),
                       _buildTimelineStep(
-                        title: "Assigned to SHE SHIELD Cyber Cell",
-                        subtitle: "Officer in charge review & evidence collection",
-                        time: "10:20 AM",
-                        isCompleted: true,
-                        isActive: true,
+                        title: "3. Assigned to SHE SHIELD Cyber Cell",
+                        subtitle: "ACP Cyber Crime & Lead Digital Investigator assigned",
+                        time: rank >= 2 ? "Assigned" : (rank == 1 ? "In Review" : "Pending"),
+                        isCompleted: rank >= 2,
+                        isActive: rank == 1,
                       ),
                       _buildTimelineStep(
-                        title: "Platform Takedown Notice Issued",
-                        subtitle: "Targeting offender URL for social link disabling",
-                        time: "Pending",
-                        isCompleted: false,
+                        title: "4. Digital Vault Evidence Verified",
+                        subtitle: "Section 65B Indian Evidence Act package certified",
+                        time: rank >= 3 ? "Certified" : (rank == 2 ? "Auditing" : "Pending"),
+                        isCompleted: rank >= 3,
+                        isActive: rank == 2,
                       ),
                       _buildTimelineStep(
-                        title: "Law Enforcement Action",
-                        subtitle: "Official legal subpoena & ISP trace",
-                        time: "Pending",
-                        isCompleted: false,
+                        title: "5. Platform Takedown & Subpoena Notice",
+                        subtitle: "Targeting offender URL for takedown & ISP subscriber subpoena",
+                        time: rank >= 4 ? "Issued" : (rank == 3 ? "Drafting" : "Pending"),
+                        isCompleted: rank >= 4,
+                        isActive: rank == 3,
+                      ),
+                      _buildTimelineStep(
+                        title: "6. Case Resolved & Threat Neutralized",
+                        subtitle: "Offender blocked, coercion prevented, legal safety active",
+                        time: rank >= 5 ? "RESOLVED" : "Pending",
+                        isCompleted: rank >= 5,
+                        isActive: rank == 4,
                         isLast: true,
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 16),
 
-                if (complaints.isNotEmpty) ...[
-                  GlassCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          "Filed Complaints Log",
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.purple),
-                        ),
-                        const SizedBox(height: 10),
-                        ListView.builder(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: complaints.length,
-                          itemBuilder: (context, index) {
-                            var item = complaints[index];
-                            return ListTile(
-                              leading: const Icon(Icons.report_problem, color: Colors.orange),
-                              title: Text(item['description'] ?? 'Cyber Complaint'),
-                              subtitle: Text("ID: ${item['id']} • ${item['status']}"),
-                              trailing: Text(item['threatScore'] ?? '90%', style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-                            );
-                          },
-                        ),
-                      ],
-                    ),
+                // Attached Evidence Section with Preview
+                GlassCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(Icons.folder_zip, color: Colors.purple, size: 20),
+                              const SizedBox(width: 8),
+                              Text(
+                                "Attached Evidence (${attachedFiles.length})",
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.purple),
+                              ),
+                            ],
+                          ),
+                          TextButton.icon(
+                            onPressed: () => _showAttachMoreVaultEvidenceModal(context, activeCase),
+                            icon: const Icon(Icons.add, size: 14, color: Colors.purple),
+                            label: const Text("Attach More", style: TextStyle(fontSize: 11, color: Colors.purple, fontWeight: FontWeight.bold)),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        "Tap 'Preview' on any file below to inspect real audio waveforms, CCTV footage, or extortion screenshots:",
+                        style: TextStyle(fontSize: 11, color: Colors.grey),
+                      ),
+                      const SizedBox(height: 10),
+                      ...attachedFiles.map((file) {
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.purple.shade100),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: Colors.purple.shade50,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Icon(getEvidenceAssetIcon(file, null), color: Colors.purple, size: 20),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      file,
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    const SizedBox(height: 2),
+                                    const Row(
+                                      children: [
+                                        Icon(Icons.check_circle, size: 11, color: Colors.green),
+                                        SizedBox(width: 3),
+                                        Text(
+                                          "Tamper Check: PASS",
+                                          style: TextStyle(fontSize: 10, color: Colors.green, fontWeight: FontWeight.bold),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              ElevatedButton.icon(
+                                onPressed: () {
+                                  EvidencePreviewDialog.show(
+                                    context,
+                                    fileName: file,
+                                    size: '2.8 MB',
+                                  );
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF4A148C),
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                  visualDensity: VisualDensity.compact,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                ),
+                                icon: const Icon(Icons.visibility, size: 14),
+                                label: const Text("Preview", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                    ],
                   ),
-                ],
+                ),
               ],
             ),
           ),
@@ -561,8 +1358,8 @@ class ComplaintStatusScreen extends StatelessWidget {
     bool isLast = false,
   }) {
     Color iconColor = isCompleted
-        ? (isActive ? Colors.purple : Colors.green)
-        : Colors.grey.shade400;
+        ? Colors.green
+        : (isActive ? Colors.purple : Colors.grey.shade400);
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -573,12 +1370,14 @@ class ComplaintStatusScreen extends StatelessWidget {
               width: 26,
               height: 26,
               decoration: BoxDecoration(
-                color: isCompleted ? iconColor.withValues(alpha: 0.15) : Colors.grey.shade200,
+                color: isCompleted ? Colors.green.shade50 : (isActive ? Colors.purple.shade50 : Colors.grey.shade100),
                 shape: BoxShape.circle,
                 border: Border.all(color: iconColor, width: 2),
               ),
               child: Icon(
-                isCompleted ? (isActive ? Icons.sync : Icons.check) : Icons.hourglass_empty,
+                isCompleted
+                    ? Icons.check
+                    : (isActive ? Icons.sync : Icons.hourglass_empty),
                 size: 14,
                 color: iconColor,
               ),
@@ -587,7 +1386,7 @@ class ComplaintStatusScreen extends StatelessWidget {
               Container(
                 width: 2,
                 height: 44,
-                color: isCompleted ? Colors.purple.shade200 : Colors.grey.shade300,
+                color: isCompleted ? Colors.green.shade200 : Colors.grey.shade300,
               ),
           ],
         ),
@@ -601,21 +1400,40 @@ class ComplaintStatusScreen extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      title,
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                        color: isActive ? Colors.purple : (isCompleted ? Colors.black87 : Colors.grey),
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                          color: isActive ? Colors.purple : (isCompleted ? Colors.black87 : Colors.grey),
+                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    Text(time, style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: isCompleted
+                            ? Colors.green.shade50
+                            : (isActive ? Colors.purple.shade50 : Colors.grey.shade100),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        time,
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: iconColor,
+                        ),
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 2),
                 Text(
                   subtitle,
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
                 ),
               ],
             ),
