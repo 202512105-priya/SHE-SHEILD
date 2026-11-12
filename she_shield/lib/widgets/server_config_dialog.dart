@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../services/database_service.dart';
 import '../services/local_database_service.dart';
@@ -26,11 +27,15 @@ class _LocalServerConfigDialogState extends State<_LocalServerConfigDialog> {
   @override
   void initState() {
     super.initState();
-    _ipCtrl = TextEditingController(
-      text: widget.db.activeServerUrl.isNotEmpty
-          ? widget.db.activeServerUrl
-          : LocalDatabaseService.defaultLanHost,
-    );
+    String initialHost = widget.db.activeServerUrl;
+    if (initialHost.isEmpty) {
+      if (kIsWeb && Uri.base.scheme == 'https') {
+        initialHost = Uri.base.origin;
+      } else {
+        initialHost = LocalDatabaseService.defaultLanHost;
+      }
+    }
+    _ipCtrl = TextEditingController(text: initialHost);
   }
 
   @override
@@ -102,6 +107,14 @@ class _LocalServerConfigDialogState extends State<_LocalServerConfigDialog> {
               spacing: 6,
               runSpacing: 6,
               children: [
+                if (kIsWeb)
+                  ActionChip(
+                    avatar: const Icon(Icons.cloud_done, size: 14, color: Colors.blue),
+                    label: const Text("Vercel (This Site)", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                    onPressed: () {
+                      _ipCtrl.text = Uri.base.origin;
+                    },
+                  ),
                 ActionChip(
                   label: const Text("Browser (localhost:8080)", style: TextStyle(fontSize: 10)),
                   onPressed: () {

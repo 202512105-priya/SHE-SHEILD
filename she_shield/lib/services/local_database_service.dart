@@ -79,21 +79,23 @@ class LocalDatabaseService {
   List<String> get candidateUrls {
     final list = <String>[];
     final custom = _normalizeBaseUrl(customServerHost);
-    if (custom.isNotEmpty) {
-      list.add(custom);
-      return list;
-    }
 
     if (kIsWeb) {
       final origin = Uri.base.origin;
       final isHttpsRemote = Uri.base.scheme == 'https' &&
           Uri.base.host != 'localhost' &&
           Uri.base.host != '127.0.0.1';
-      if ((Uri.base.scheme == 'http' || Uri.base.scheme == 'https') &&
-          origin.isNotEmpty) {
+      // When hosted on Vercel / remote HTTPS, prioritize the same-origin backend!
+      if (isHttpsRemote && origin.isNotEmpty) {
         list.add(origin);
       }
+      if (custom.isNotEmpty && !list.contains(custom)) {
+        list.add(custom);
+      }
       if (!isHttpsRemote) {
+        if (custom.isNotEmpty) {
+          return list;
+        }
         final webHost = getWebOriginHost();
         if (webHost != null && webHost.isNotEmpty) {
           final localOrigin = 'http://$webHost:8080';
@@ -108,6 +110,11 @@ class LocalDatabaseService {
           list.add('http://127.0.0.1:8080');
         }
       }
+      return list;
+    }
+
+    if (custom.isNotEmpty) {
+      list.add(custom);
       return list;
     }
 
