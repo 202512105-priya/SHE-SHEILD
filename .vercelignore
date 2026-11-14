@@ -1,6 +1,7 @@
 # Git and virtual environments
 .git/
 .venv/
+_flutter/
 
 # Build and local dumps
 *.sql
