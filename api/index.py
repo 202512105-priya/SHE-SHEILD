@@ -10,7 +10,9 @@ import db_adapter
 
 os.environ["SHESHIELD_VAULT_PATH"] = "/tmp/secure_audio_vault"
 
-if db_adapter.is_cloud_postgres_configured():
+if db_adapter.is_cloud_turso_configured():
+    print("[Vercel Serverless] Cloud Turso libSQL configured via TURSO_DATABASE_URL / TURSO_AUTH_TOKEN")
+elif db_adapter.is_cloud_postgres_configured():
     print("[Vercel Serverless] Cloud PostgreSQL configured via DATABASE_URL / POSTGRES_URL")
 else:
     # Fallback to ephemeral SQLite in /tmp only when no cloud database URL is configured

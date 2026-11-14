@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/database_service.dart';
+import '../services/local_database_service.dart';
 import '../widgets/server_config_dialog.dart';
 
 // Helper Glassmorphism Card Widget
@@ -98,6 +99,97 @@ bool _verhoeffCheck(String numStr) {
   return c == 0;
 }
 
+class DatabaseHealthBadge extends StatefulWidget {
+  const DatabaseHealthBadge({super.key});
+
+  @override
+  State<DatabaseHealthBadge> createState() => _DatabaseHealthBadgeState();
+}
+
+class _DatabaseHealthBadgeState extends State<DatabaseHealthBadge> {
+  final _db = LocalDatabaseService();
+  bool _probing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkHealth();
+  }
+
+  Future<void> _checkHealth() async {
+    if (!mounted) return;
+    setState(() => _probing = true);
+    await _db.connect(forceReprobe: true);
+    if (mounted) {
+      setState(() => _probing = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = _db.healthState;
+    Color bg;
+    Color border;
+    Color text;
+    IconData icon;
+    String label;
+
+    if (_probing || state == BackendHealthState.checking) {
+      bg = Colors.grey.shade50;
+      border = Colors.grey.shade300;
+      text = Colors.grey.shade800;
+      icon = Icons.sync;
+      label = "Checking Database Connection...";
+    } else if (state == BackendHealthState.cloudDatabaseConnected) {
+      bg = Colors.green.shade50;
+      border = Colors.green.shade300;
+      text = Colors.green.shade800;
+      icon = Icons.cloud_done;
+      label = "Cloud Database Connected (${_db.databaseLabel})";
+    } else if (state == BackendHealthState.databaseFailed) {
+      bg = Colors.red.shade50;
+      border = Colors.red.shade300;
+      text = Colors.red.shade900;
+      icon = Icons.error_outline;
+      label = "Database Connection Failed";
+    } else {
+      bg = Colors.orange.shade50;
+      border = Colors.orange.shade300;
+      text = Colors.orange.shade900;
+      icon = Icons.warning_amber_rounded;
+      label = "Backend Unavailable (Tap to retry)";
+    }
+
+    return InkWell(
+      onTap: _checkHealth,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: border),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: text),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: text,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 // Welcome Screen with Role Entry Points
 class WelcomeScreen extends StatelessWidget {
   const WelcomeScreen({super.key});
@@ -161,31 +253,7 @@ class WelcomeScreen extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 12),
-                Center(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.green.shade50,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Colors.green.shade300),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.cloud_done, size: 14, color: Colors.green.shade700),
-                        const SizedBox(width: 6),
-                        Text(
-                          "Vercel Cloud Database Active",
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.green.shade800,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+                const Center(child: DatabaseHealthBadge()),
                 const SizedBox(height: 24),
                 const Text(
                   "Access Portal",
@@ -443,7 +511,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       textAlign: TextAlign.center,
                       style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 12),
+                    const Center(child: DatabaseHealthBadge()),
+                    const SizedBox(height: 16),
 
                     if (widget.initialMessage != null && _errorMessage == null) ...[
                       Container(

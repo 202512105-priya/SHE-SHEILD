@@ -17,6 +17,7 @@ import hmac
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
 import math
+import mimetypes
 import os
 import re
 import secrets
@@ -682,6 +683,17 @@ def init_db():
     conn = get_db()
     c = conn.cursor()
 
+    # For Turso Cloud, schema tables and seeds are already provisioned.
+    # Quick probe avoids 100+ cross-region HTTP round trips on every server startup.
+    if getattr(conn, "is_turso", False):
+        try:
+            c.execute("SELECT COUNT(*) FROM users;")
+            cnt = c.fetchone()[0]
+            print(f"[Database] Connected to Turso Cloud SQLite (database-green-mountain) & RBAC ready ({cnt} users).")
+            return
+        except Exception as e:
+            print(f"[Database] Turso probe note: {e}")
+
     # 1. Roles, Permissions, Role_Permissions
     c.execute(
         """
@@ -1314,6 +1326,61 @@ class SQLiteAPIHandler(BaseHTTPRequestHandler):
         self.send_response(204)
         self._send_cors()
         self.end_headers()
+
+    def _serve_static_file(self, req_path):
+        cur_dir = os.path.dirname(os.path.abspath(__file__))
+        candidates = [
+            os.path.join(cur_dir, "..", "she_shield", "build", "web"),
+            os.path.join(cur_dir, "build", "web"),
+        ]
+        web_root = None
+        for c in candidates:
+            if os.path.isdir(c):
+                web_root = os.path.abspath(c)
+                break
+        if not web_root:
+            return False
+
+        clean_path = req_path.split("?", 1)[0].split("#", 1)[0].strip("/")
+        if not clean_path:
+            clean_path = "index.html"
+
+        file_path = os.path.abspath(os.path.join(web_root, clean_path))
+        if not file_path.startswith(web_root):
+            return False
+
+        if os.path.isdir(file_path):
+            file_path = os.path.join(file_path, "index.html")
+
+        if not os.path.isfile(file_path):
+            file_path = os.path.join(web_root, "index.html")
+
+        if not os.path.isfile(file_path):
+            return False
+
+        content_type, _ = mimetypes.guess_type(file_path)
+        if not content_type:
+            if file_path.endswith(".js"):
+                content_type = "application/javascript"
+            elif file_path.endswith(".wasm"):
+                content_type = "application/wasm"
+            elif file_path.endswith(".json"):
+                content_type = "application/json"
+            else:
+                content_type = "application/octet-stream"
+
+        try:
+            with open(file_path, "rb") as f:
+                data = f.read()
+            self.send_response(200)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(data)))
+            self._send_cors()
+            self.end_headers()
+            self.wfile.write(data)
+            return True
+        except Exception:
+            return False
 
     def _send_json(self, data, status=200):
         body = json.dumps(data).encode("utf-8")
@@ -2256,31 +2323,63 @@ class SQLiteAPIHandler(BaseHTTPRequestHandler):
         c = conn.cursor()
 
         try:
-            # Public health endpoints (database counts only, no PII)
-            if path in ("", "/health", "/api/status"):
-                cases_count = c.execute("SELECT COUNT(*) FROM sos_cases;").fetchone()[0]
-                complaints_count = c.execute("SELECT COUNT(*) FROM cyber_complaints;").fetchone()[0]
-                vault_count = c.execute("SELECT COUNT(*) FROM vault_assets;").fetchone()[0]
-                users_count = c.execute("SELECT COUNT(*) FROM users;").fetchone()[0]
+            # Public health endpoints (live database connectivity probe)
+            if path in ("/health", "/api/status"):
                 is_pg = getattr(conn, "is_postgres", False)
+                is_turso = getattr(conn, "is_turso", False)
                 driver_name = getattr(conn, "driver_name", "sqlite3")
+                db_err = None
+                db_name = "database-green-mountain (Turso)" if is_turso else ("she_shield.db" if not is_pg else "neondb")
+                db_version = "libSQL / Turso Cloud" if is_turso else ("PostgreSQL" if is_pg else "SQLite 3")
+                db_schema = "turso" if is_turso else ("main" if not is_pg else "public")
+                records = {}
+                try:
+                    c.execute("SELECT 1;")
+                    if is_pg:
+                        c.execute("SELECT current_database();")
+                        db_name = c.fetchone()[0]
+                        c.execute("SELECT version();")
+                        db_version = c.fetchone()[0]
+                        c.execute("SELECT current_schema();")
+                        db_schema = c.fetchone()[0]
+                    cases_count = c.execute("SELECT COUNT(*) FROM sos_cases;").fetchone()[0]
+                    complaints_count = c.execute("SELECT COUNT(*) FROM cyber_complaints;").fetchone()[0]
+                    vault_count = c.execute("SELECT COUNT(*) FROM vault_assets;").fetchone()[0]
+                    users_count = c.execute("SELECT COUNT(*) FROM users;").fetchone()[0]
+                    records = {
+                        "sos_cases": cases_count,
+                        "cyber_complaints": complaints_count,
+                        "vault_assets": vault_count,
+                        "users": users_count,
+                    }
+                except Exception as ex:
+                    db_err = str(ex)
+
+                db_ok = (db_err is None)
+                db_label = "Turso Cloud SQLite (Vercel)" if is_turso else ("PostgreSQL (Neon)" if is_pg else "SQLite 3 (Local)")
                 self._send_json(
                     {
-                        "status": "ok",
-                        "server": "SHE SHIELD Cloud Database Server",
-                        "database": "PostgreSQL (Neon)" if is_pg else "SQLite 3",
+                        "status": "ok" if db_ok else "database_error",
+                        "databaseConnected": db_ok,
+                        "databaseError": db_err,
                         "isPostgres": is_pg,
+                        "isTurso": is_turso,
+                        "isCloud": is_pg or is_turso,
+                        "database": db_label,
+                        "databaseName": db_name,
+                        "databaseVersion": db_version,
+                        "databaseSchema": db_schema,
                         "driver": driver_name,
                         "port": PORT,
-                        "records": {
-                            "sos_cases": cases_count,
-                            "cyber_complaints": complaints_count,
-                            "vault_assets": vault_count,
-                            "users": users_count,
-                        },
-                    }
+                        "records": records,
+                    },
+                    status=200 if db_ok else 500
                 )
                 return
+
+            if path in ("", "/"):
+                if self._serve_static_file("index.html"):
+                    return
 
             # Auth identity endpoint
             if path == "/api/auth/me":

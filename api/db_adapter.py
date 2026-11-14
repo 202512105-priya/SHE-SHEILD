@@ -10,11 +10,15 @@ Handles:
 - Table creation, role/permission seeding, and automatic data migration
 """
 
+import base64
+import json
 import os
 import re
 import sqlite3
 import ssl
 import sys
+import urllib.error
+import urllib.request
 from urllib.parse import urlparse
 
 # Driver discovery
@@ -339,16 +343,185 @@ class SqliteConnectionWrapper:
         self.close()
 
 
+def get_turso_config():
+    """Retrieves Turso database URL and auth token from environment variables."""
+    load_env_file()
+    url = (os.environ.get("TURSO_DATABASE_URL") or os.environ.get("TURSO_DB_URL") or "").strip()
+    token = (os.environ.get("TURSO_AUTH_TOKEN") or os.environ.get("TURSO_DB_AUTH_TOKEN") or "").strip()
+    return url, token
+
+
+def is_cloud_turso_configured() -> bool:
+    """Returns True if a Turso cloud connection string and auth token are configured."""
+    url, token = get_turso_config()
+    return bool(url and token and url.startswith("libsql://"))
+
+
+class TursoCursorWrapper:
+    """Wraps Turso / libSQL HTTP pipeline execution with sqlite3.Cursor interface & DictRow."""
+    def __init__(self, conn):
+        self.conn = conn
+        self.connection = conn
+        self.description = None
+        self.rowcount = -1
+        self._rows = []
+        self._pos = 0
+
+    def _format_args(self, params):
+        if params is None:
+            return []
+        if not isinstance(params, (list, tuple)):
+            params = [params]
+        args = []
+        for p in params:
+            if p is None:
+                args.append({"type": "null"})
+            elif isinstance(p, bool):
+                args.append({"type": "integer", "value": "1" if p else "0"})
+            elif isinstance(p, int):
+                args.append({"type": "integer", "value": str(p)})
+            elif isinstance(p, float):
+                args.append({"type": "float", "value": p})
+            elif isinstance(p, bytes):
+                args.append({"type": "blob", "base64": base64.b64encode(p).decode("ascii")})
+            else:
+                args.append({"type": "text", "value": str(p)})
+        return args
+
+    def execute(self, sql, params=None):
+        args = self._format_args(params)
+        payload = {
+            "requests": [
+                {
+                    "type": "execute",
+                    "stmt": {
+                        "sql": sql,
+                        "args": args
+                    }
+                },
+                {"type": "close"}
+            ]
+        }
+        res = self.conn._request(payload)
+        stmt_res = res["results"][0]
+        if stmt_res.get("type") == "error":
+            raise RuntimeError(f"Turso Error: {stmt_res['error']['message']}")
+        result = stmt_res["response"]["result"]
+        cols = result.get("cols", [])
+        self.description = [(c["name"], None, None, None, None, None, None) for c in cols]
+        self.rowcount = result.get("affected_row_count", 0)
+        raw_rows = result.get("rows", [])
+        self._rows = []
+        for r in raw_rows:
+            parsed_vals = []
+            for cell in r:
+                t = cell.get("type")
+                if t == "null":
+                    parsed_vals.append(None)
+                elif t == "integer":
+                    parsed_vals.append(int(cell["value"]))
+                elif t == "float":
+                    parsed_vals.append(float(cell["value"]))
+                elif t == "blob":
+                    parsed_vals.append(base64.b64decode(cell["base64"]))
+                else:
+                    parsed_vals.append(cell.get("value"))
+            self._rows.append(DictRow(tuple(parsed_vals), self.description))
+        self._pos = 0
+        return self
+
+    def executemany(self, sql, seq_of_params):
+        for params in seq_of_params:
+            self.execute(sql, params)
+        return self
+
+    def fetchone(self):
+        if self._pos < len(self._rows):
+            row = self._rows[self._pos]
+            self._pos += 1
+            return row
+        return None
+
+    def fetchall(self):
+        remaining = self._rows[self._pos:]
+        self._pos = len(self._rows)
+        return remaining
+
+    def close(self):
+        pass
+
+
+class TursoConnectionWrapper:
+    """Wraps Turso HTTP pipeline to provide unified SQLite-compatible connection interface."""
+    def __init__(self, db_url, auth_token):
+        self.db_url = db_url
+        self.auth_token = auth_token
+        self.http_url = db_url.replace("libsql://", "https://") + "/v2/pipeline"
+        self.is_postgres = False
+        self.is_turso = True
+        self.driver_name = "turso_cloud"
+        self._opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+    def _request(self, payload):
+        req = urllib.request.Request(
+            self.http_url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {self.auth_token}",
+                "Content-Type": "application/json"
+            }
+        )
+        try:
+            with self._opener.open(req, timeout=15) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            err_body = e.read().decode("utf-8")
+            raise RuntimeError(f"Turso HTTP Error {e.code}: {err_body}")
+        except Exception as e:
+            raise RuntimeError(f"Turso Connection Error: {e}")
+
+    def cursor(self):
+        return TursoCursorWrapper(self)
+
+    def execute(self, sql, params=None):
+        cur = self.cursor()
+        cur.execute(sql, params)
+        return cur
+
+    def commit(self):
+        pass
+
+    def rollback(self):
+        pass
+
+    def close(self):
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+
+
 def get_db(sqlite_fallback_path: str = None):
     """
     Main database connection factory.
-    Returns PostgreSQL connection if DATABASE_URL is set, else SQLite connection.
+    1. Returns Turso Cloud connection if TURSO_DATABASE_URL is set.
+    2. Returns PostgreSQL connection if DATABASE_URL is set.
+    3. Falls back to local SQLite file.
     """
+    # 1. Turso Cloud SQLite (Vercel Marketplace)
+    if is_cloud_turso_configured():
+        url, token = get_turso_config()
+        return TursoConnectionWrapper(url, token)
+
+    # 2. PostgreSQL (Neon)
     url = get_database_url()
     if url and (url.startswith("postgres://") or url.startswith("postgresql://")):
         return connect_postgres(url)
 
-    # Offline / Local fallback to SQLite
+    # 3. Offline / Local fallback to SQLite
     if not sqlite_fallback_path:
         api_dir = os.path.dirname(os.path.abspath(__file__))
         sqlite_fallback_path = os.environ.get("SHESHIELD_DB_PATH") or os.path.join(api_dir, "she_shield.db")

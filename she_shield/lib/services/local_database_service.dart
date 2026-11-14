@@ -20,6 +20,13 @@ class ApiResult<T> {
   });
 }
 
+enum BackendHealthState {
+  cloudDatabaseConnected, // GREEN: Cloud database connected and query successful
+  databaseFailed,         // RED: Database connection or query failed
+  backendUnavailable,     // ORANGE: Backend unreachable or offline
+  checking,               // Initial probing
+}
+
 class LocalDatabaseService {
   static final LocalDatabaseService _instance = LocalDatabaseService._internal();
   factory LocalDatabaseService() => _instance;
@@ -48,6 +55,10 @@ class LocalDatabaseService {
   String _lastError = '';
   String? _authToken;
   static String customServerHost = '';
+  BackendHealthState _healthState = BackendHealthState.checking;
+  String _databaseLabel = 'Cloud Database';
+  String _databaseName = '';
+  bool _isCloud = false;
 
   VoidCallback? onUnauthorized;
 
@@ -55,6 +66,10 @@ class LocalDatabaseService {
   String get activeServerUrl => _activeServerUrl;
   String get lastError => _lastError;
   String? get authToken => _authToken;
+  BackendHealthState get healthState => _healthState;
+  String get databaseLabel => _databaseLabel;
+  String get databaseName => _databaseName;
+  bool get isCloud => _isCloud;
 
   void setAuthToken(String? token) {
     _authToken = (token == null || token.trim().isEmpty) ? null : token.trim();
@@ -109,7 +124,7 @@ class LocalDatabaseService {
 
   Future<bool> _probeUrl(String baseUrl) async {
     try {
-      debugPrint('[LocalDB] Probing local SQLite server at $baseUrl/health...');
+      debugPrint('[LocalDB] Probing backend health at $baseUrl/health...');
       final res = await platformHttpRequest(
         method: 'GET',
         url: '$baseUrl/health',
@@ -117,13 +132,31 @@ class LocalDatabaseService {
       );
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
-        if (data is Map && data['status'] == 'ok') {
-          debugPrint('[LocalDB] Health OK at $baseUrl (${data['database']})');
+        if (data is Map) {
+          final isCloud = data['isCloud'] == true || data['isPostgres'] == true || data['isTurso'] == true;
+          final dbConnected = data['databaseConnected'] == true;
+          _isCloud = isCloud;
+          _databaseLabel = data['database']?.toString() ?? (isCloud ? 'Cloud Database' : 'SQLite Local');
+          _databaseName = data['databaseName']?.toString() ?? '';
+
+          if (dbConnected && isCloud) {
+            _healthState = BackendHealthState.cloudDatabaseConnected; // GREEN
+          } else if (!dbConnected) {
+            _healthState = BackendHealthState.databaseFailed; // RED
+          } else {
+            // Local SQLite fallback (not cloud)
+            _healthState = BackendHealthState.databaseFailed; // RED
+          }
+          debugPrint('[LocalDB] Health OK at $baseUrl ($databaseLabel, state: $_healthState)');
           return true;
         }
+      } else {
+        _healthState = BackendHealthState.databaseFailed; // RED
+        return false;
       }
     } catch (e) {
       _lastError = '$baseUrl -> $e';
+      _healthState = BackendHealthState.backendUnavailable; // ORANGE
       debugPrint('[LocalDB] Probe failed for $baseUrl: $e');
     }
     return false;
@@ -131,9 +164,27 @@ class LocalDatabaseService {
 
   Future<bool> connect({bool forceReprobe = false}) async {
     if (kIsWeb) {
-      _activeServerUrl = Uri.base.origin;
-      _isConnected = true;
-      return true;
+      final origin = Uri.base.origin;
+      // 1. First probe current web origin
+      if (origin.isNotEmpty && await _probeUrl(origin)) {
+        _activeServerUrl = origin;
+        _isConnected = true;
+        return true;
+      }
+      // 2. If running locally on port 3000, probe direct backend on port 8080
+      if (await _probeUrl('http://localhost:8080')) {
+        _activeServerUrl = 'http://localhost:8080';
+        _isConnected = true;
+        return true;
+      }
+      if (await _probeUrl('http://127.0.0.1:8080')) {
+        _activeServerUrl = 'http://127.0.0.1:8080';
+        _isConnected = true;
+        return true;
+      }
+      _isConnected = false;
+      _activeServerUrl = origin.isNotEmpty ? origin : 'http://localhost:8080';
+      return false;
     }
 
     if (!forceReprobe && _isConnected && _activeServerUrl.isNotEmpty) {
