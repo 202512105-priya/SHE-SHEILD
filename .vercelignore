@@ -1,0 +1,25 @@
+# Git and virtual environments
+.git/
+.venv/
+
+# Build and local dumps
+*.sql
+*.log
+*.zip
+*.apk
+*.pptx
+*.docx
+
+# Presentation and asset documents
+docs/
+extracted_assets/
+she_shield 2/
+admin_dashboard/
+backend/
+frontend/
+firebase/
+
+# Non-web platforms & test captures inside she_shield
+she_shield/test/
+she_shield/*.png
+she_shield/*.bat

@@ -51,3 +51,5 @@ she_shield/server/*.db-*
 she_shield/server/secure_audio_vault/
 she_shield/test_*.png
 she_shield/final_screen.png
+she_shield_turso_*.sql
+she_shield_data_dump.sql

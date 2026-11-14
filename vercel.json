@@ -1,8 +1,11 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "cd she_shield && flutter build web --release && find build -mindepth 1 -maxdepth 1 ! -name web -exec rm -rf {} + && rm -rf .dart_tool",
+  "outputDirectory": "she_shield/build/web",
   "functions": {
     "api/**/*.py": {
-      "excludeFiles": "{she_shield/**,docs/**,extracted_assets/**,*.apk,*.pptx,*.docx,*.zip,*.sql,backend/**,frontend/**,admin_dashboard/**,firebase/**,she_shield 2/**,build/**}"
+      "includeFiles": "api/**",
+      "excludeFiles": "{she_shield,docs,extracted_assets,backend,frontend,admin_dashboard,firebase,build}/**"
     }
   },
   "rewrites": [
