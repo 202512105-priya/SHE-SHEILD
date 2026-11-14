@@ -1,5 +1,15 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "functions": {
+    "api/**/*.py": {
+      "includeFiles": "api/**",
+      "excludeFiles": "{she_shield/**,docs/**,extracted_assets/**,*.apk,*.pptx,*.docx,*.zip,*.sql,backend/**,frontend/**,admin_dashboard/**,firebase/**,she_shield 2/**}"
+    },
+    "api/index.py": {
+      "includeFiles": "api/**",
+      "excludeFiles": "{she_shield/**,docs/**,extracted_assets/**,*.apk,*.pptx,*.docx,*.zip,*.sql,backend/**,frontend/**,admin_dashboard/**,firebase/**,she_shield 2/**}"
+    }
+  },
   "rewrites": [
     {
       "source": "/health",
