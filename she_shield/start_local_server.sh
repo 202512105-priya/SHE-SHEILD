@@ -9,4 +9,11 @@ echo "=========================================================="
 echo "Host Machine Wi-Fi IP: $HOST_IP"
 echo "Starting Python SQLite Server on port 8080..."
 echo ""
-python3 local_sqlite_server.py
+if [ -f "$DIR/../.venv/bin/python" ]; then
+  PYTHON="$DIR/../.venv/bin/python"
+elif [ -f "$DIR/.venv/bin/python" ]; then
+  PYTHON="$DIR/.venv/bin/python"
+else
+  PYTHON="python3"
+fi
+$PYTHON local_sqlite_server.py

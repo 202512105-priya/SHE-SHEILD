@@ -120,6 +120,33 @@ class TestSheShieldMigration(unittest.TestCase):
     def setUpClass(cls):
         init_db()
 
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            conn = local_sqlite_server.get_db()
+            is_pg = getattr(conn, "is_postgres", False)
+            placeholder = "%s" if is_pg else "?"
+            cur = conn.cursor()
+            if cls.active_journey_id:
+                cur.execute(f"DELETE FROM journey_locations WHERE journey_id = {placeholder};", (cls.active_journey_id,))
+                cur.execute(f"DELETE FROM journey_sharing WHERE journey_id = {placeholder};", (cls.active_journey_id,))
+                cur.execute(f"DELETE FROM journey_events WHERE journey_id = {placeholder};", (cls.active_journey_id,))
+                cur.execute(f"DELETE FROM travel_journeys WHERE id = {placeholder};", (cls.active_journey_id,))
+            for email in [cls.test_user_email, cls.test_guardian_email]:
+                cur.execute(f"SELECT id FROM users WHERE email = {placeholder};", (email,))
+                u = cur.fetchone()
+                if u:
+                    uid = u[0]
+                    cur.execute(f"DELETE FROM authentication_sessions WHERE user_id = {placeholder};", (uid,))
+                    cur.execute(f"DELETE FROM guardian_connections WHERE user_id = {placeholder} OR guardian_id = {placeholder};", (uid, uid))
+                    cur.execute(f"DELETE FROM audit_logs WHERE actor_user_id = {placeholder};", (uid,))
+                    cur.execute(f"DELETE FROM users WHERE id = {placeholder};", (uid,))
+            conn.commit()
+            conn.close()
+            print("[CLEANUP PASS] Test user, guardian, journey, and session records safely removed after testing.")
+        except Exception as e:
+            print(f"[CLEANUP NOTICE] {e}")
+
     def test_01_health_and_database_status(self):
         status, body = make_request("GET", "/health")
         self.assertEqual(status, 200)

@@ -197,8 +197,37 @@ class PostgresConnectionWrapper:
         self.close()
 
 
+def load_env_file():
+    """Safely loads variables from .env or .env.local if present, without overwriting existing env."""
+    current = os.path.dirname(os.path.abspath(__file__))
+    candidates = [
+        os.path.join(current, ".env"),
+        os.path.join(current, ".env.local"),
+        os.path.join(current, "..", ".env"),
+        os.path.join(current, "..", ".env.local"),
+        os.path.join(current, "..", "..", ".env"),
+        os.path.join(current, "..", "..", ".env.local"),
+    ]
+    for c in candidates:
+        if os.path.isfile(c):
+            try:
+                with open(c, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line or line.startswith("#") or "=" not in line:
+                            continue
+                        k, v = line.split("=", 1)
+                        k = k.strip()
+                        v = v.strip().strip("'\"")
+                        if k and k not in os.environ:
+                            os.environ[k] = v
+            except Exception:
+                pass
+
+
 def get_database_url() -> str:
     """Retrieves PostgreSQL connection URL from environment variables."""
+    load_env_file()
     url = (
         os.environ.get("DATABASE_URL")
         or os.environ.get("POSTGRES_URL")

@@ -8,4 +8,12 @@ if [ ! -d "build/web" ]; then
   flutter build web
 fi
 
-python3 -u "$DIR/server/web_frontend_server.py"
+if [ -f "$DIR/../.venv/bin/python" ]; then
+  PYTHON="$DIR/../.venv/bin/python"
+elif [ -f "$DIR/.venv/bin/python" ]; then
+  PYTHON="$DIR/.venv/bin/python"
+else
+  PYTHON="python3"
+fi
+
+$PYTHON -u "$DIR/server/web_frontend_server.py"

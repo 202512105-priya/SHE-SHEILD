@@ -5,6 +5,7 @@ Serves the built Flutter web application (build/web) on port 3000.
 Connects to the Local SQLite Live Server running on port 8080.
 """
 
+import json
 import mimetypes
 import os
 import socket
@@ -36,7 +37,51 @@ class FlutterWebHandler(SimpleHTTPRequestHandler):
         self.send_header("Cache-Control", "no-cache")
         super().end_headers()
 
+    def _is_api(self):
+        clean_path = self.path.split("?", 1)[0].split("#", 1)[0]
+        return clean_path.startswith("/api/") or clean_path in ("/health", "/api/status")
+
+    def _proxy_to_backend(self, method):
+        backend_url = f"http://127.0.0.1:{API_PORT}{self.path}"
+        content_length = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(content_length) if content_length > 0 else None
+
+        req = urllib.request.Request(backend_url, data=body, method=method)
+        for header, val in self.headers.items():
+            if header.lower() not in ("host", "content-length"):
+                req.add_header(header, val)
+
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        try:
+            with opener.open(req, timeout=15) as resp:
+                self.send_response(resp.status)
+                for header, val in resp.getheaders():
+                    if header.lower() not in ("transfer-encoding", "content-length"):
+                        self.send_header(header, val)
+                content = resp.read()
+                self.send_header("Content-Length", str(len(content)))
+                self.end_headers()
+                self.wfile.write(content)
+        except urllib.error.HTTPError as e:
+            self.send_response(e.code)
+            for header, val in e.headers.items():
+                if header.lower() not in ("transfer-encoding", "content-length"):
+                    self.send_header(header, val)
+            content = e.read()
+            self.send_header("Content-Length", str(len(content)))
+            self.end_headers()
+            self.wfile.write(content)
+        except Exception as e:
+            err_json = json.dumps({"error": f"Failed to reach backend API on port {API_PORT}: {e}"}).encode("utf-8")
+            self.send_response(502)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(err_json)))
+            self.end_headers()
+            self.wfile.write(err_json)
+
     def do_GET(self):
+        if self._is_api():
+            return self._proxy_to_backend("GET")
         clean_path = self.path.split("?", 1)[0].split("#", 1)[0]
         if clean_path in ("/", ""):
             self.path = "/index.html"
@@ -47,6 +92,30 @@ class FlutterWebHandler(SimpleHTTPRequestHandler):
                 # SPA fallback for Flutter routing
                 self.path = "/index.html"
         return super().do_GET()
+
+    def do_POST(self):
+        if self._is_api():
+            return self._proxy_to_backend("POST")
+        self.send_error(405, "Method Not Allowed")
+
+    def do_PUT(self):
+        if self._is_api():
+            return self._proxy_to_backend("PUT")
+        self.send_error(405, "Method Not Allowed")
+
+    def do_DELETE(self):
+        if self._is_api():
+            return self._proxy_to_backend("DELETE")
+        self.send_error(405, "Method Not Allowed")
+
+    def do_OPTIONS(self):
+        if self._is_api():
+            return self._proxy_to_backend("OPTIONS")
+        self.send_response(204)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+        self.end_headers()
 
 
 def get_lan_ips():
