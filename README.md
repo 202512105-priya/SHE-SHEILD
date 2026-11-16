@@ -221,8 +221,6 @@ she-shield/
 | **Python Flask** | Backend Microservices | Lightweight, asynchronous WSGI framework offering seamless native integration with PyTorch and OpenCV AI pipelines. |
 | **PostgreSQL** | Relational Database | Strict ACID compliance for user accounts, RBAC permissions, complaint dossiers, and immutable audit trails. |
 | **Redis** | In-Memory Streaming | Sub-millisecond pub/sub latency for distributing real-time GPS coordinates and managing sliding-window rate limiters. |
-| **PyTorch & Transformers** | AI Threat Models | Evaluates harassment message toxicity and extortion severity in under 3 seconds. |
-| **Tesseract / EasyOCR** | OCR Vision Engine | Parses blackmail screenshots, extracting sender identities, message text, and timestamps directly on upload. |
 | **SHA-256 + AES-256-GCM** | Cryptographic Vault | Guaranteed bit-for-bit forensic integrity meeting Indian Evidence Act Section 65B legal standards. |
 
 ---
