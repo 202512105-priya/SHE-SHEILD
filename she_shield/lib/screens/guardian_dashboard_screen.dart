@@ -558,6 +558,47 @@ class _GuardianDashboardScreenState extends State<GuardianDashboardScreen> {
                       )
                     else if (a['locationName'] != null)
                       Text('Location Info: ${a['locationName']}', style: const TextStyle(fontSize: 12.5)),
+                    if (a['deviceType'] != null && a['deviceType'].toString().isNotEmpty)
+                      Container(
+                        margin: const EdgeInsets.only(top: 6, bottom: 6),
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: a['deviceType'].toString().contains('WEARABLE')
+                              ? Colors.purple.shade50
+                              : Colors.blueGrey.shade50,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: a['deviceType'].toString().contains('WEARABLE')
+                                ? Colors.purple.shade300
+                                : Colors.blueGrey.shade200,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              a['deviceType'].toString().contains('WEARABLE')
+                                  ? Icons.watch
+                                  : Icons.phonelink_ring,
+                              size: 14,
+                              color: a['deviceType'].toString().contains('WEARABLE')
+                                  ? Colors.purple.shade800
+                                  : Colors.blueGrey.shade800,
+                            ),
+                            const SizedBox(width: 5),
+                            Text(
+                              'Trigger Source: ${a['deviceType']}',
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.bold,
+                                color: a['deviceType'].toString().contains('WEARABLE')
+                                    ? Colors.purple.shade900
+                                    : Colors.blueGrey.shade900,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     if (!resolved && lat != null && lng != null) ...[
                       const SizedBox(height: 10),
                       LiveGoogleMapView(

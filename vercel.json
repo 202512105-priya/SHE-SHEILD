@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "git clone https://github.com/flutter/flutter.git --depth 1 -b stable _flutter && cd she_shield && ../_flutter/bin/flutter build web --release && cd .. && rm -rf _flutter she_shield/.dart_tool",
+  "buildCommand": "git clone https://github.com/flutter/flutter.git --depth 1 -b stable _flutter && cd she_shield && ../_flutter/bin/flutter build web --release && cp web/ble_bridge.js build/web/ble_bridge.js && cd ..; rm -rf _flutter she_shield/.dart_tool",
   "outputDirectory": "she_shield/build/web",
   "functions": {
     "api/**/*.py": {

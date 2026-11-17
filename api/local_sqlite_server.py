@@ -60,6 +60,134 @@ ALLOWED_AUDIO_MIMES = {
     "audio/ogg": ".ogg",
 }
 
+EVIDENCE_VAULT_DIR = os.environ.get("SHESHIELD_EVIDENCE_VAULT_PATH") or os.path.join(SERVER_DIR, "secure_evidence_vault")
+MAX_VAULT_BYTES = 50 * 1024 * 1024  # 50 MB limit
+
+ALLOWED_VAULT_EXTENSIONS = {
+    # Photos / Images
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+    ".heic": "image/heic",
+    ".gif": "image/gif",
+    # Videos
+    ".mp4": "video/mp4",
+    ".mov": "video/quicktime",
+    ".mkv": "video/x-matroska",
+    ".avi": "video/x-msvideo",
+    ".webm": "video/webm",
+    # Audio
+    ".mp3": "audio/mpeg",
+    ".wav": "audio/wav",
+    ".m4a": "audio/mp4",
+    ".aac": "audio/aac",
+    ".ogg": "audio/ogg",
+    ".flac": "audio/flac",
+    # Documents
+    ".pdf": "application/pdf",
+    ".doc": "application/msword",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".txt": "text/plain",
+    ".csv": "text/csv",
+    ".xls": "application/vnd.ms-excel",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    # Telemetry
+    ".json": "application/json",
+    ".log": "text/plain",
+}
+
+
+def infer_evidence_category(filename: str, override: str = None) -> tuple:
+    if override:
+        ov = override.upper()
+        if "PHOTO" in ov or "IMAGE" in ov:
+            return "IMAGE", "Photos"
+        if "VIDEO" in ov:
+            return "VIDEO", "Videos"
+        if "AUDIO" in ov:
+            return "AUDIO", "Audio Notes"
+        if "DOC" in ov:
+            return "DOCUMENT", "Documents"
+        if "TELEM" in ov:
+            return "TELEMETRY", "Telemetry"
+    lower = filename.lower()
+    if lower.endswith((".png", ".jpg", ".jpeg", ".webp", ".heic", ".gif")):
+        return "IMAGE", "Photos"
+    if lower.endswith((".mp4", ".mov", ".mkv", ".avi", ".webm")):
+        return "VIDEO", "Videos"
+    if lower.endswith((".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac")):
+        return "AUDIO", "Audio Notes"
+    if lower.endswith((".pdf", ".doc", ".docx", ".txt", ".csv", ".xls", ".xlsx")):
+        return "DOCUMENT", "Documents"
+    if lower.endswith((".json", ".log")):
+        return "TELEMETRY", "Telemetry"
+    return "DOCUMENT", "Documents"
+
+
+class VaultStorageManager:
+    @staticmethod
+    def store_file(file_bytes: bytes, user_id: str, sha256_hash: str, filename: str, mime_type: str) -> dict:
+        # 1. Cloud: Vercel Blob if BLOB_READ_WRITE_TOKEN is configured
+        blob_token = os.environ.get("BLOB_READ_WRITE_TOKEN")
+        if blob_token:
+            try:
+                import urllib.request
+                blob_url = f"https://blob.vercel-storage.com/evidence/{user_id}/{sha256_hash}/{filename}"
+                req = urllib.request.Request(
+                    blob_url,
+                    data=file_bytes,
+                    headers={
+                        "authorization": f"Bearer {blob_token}",
+                        "x-content-type": mime_type,
+                        "x-add-random-suffix": "false"
+                    },
+                    method="PUT"
+                )
+                with urllib.request.urlopen(req, timeout=15) as resp:
+                    resp_data = json.loads(resp.read().decode("utf-8"))
+                    url = resp_data.get("url")
+                    return {
+                        "storage_path": resp_data.get("pathname", f"evidence/{user_id}/{sha256_hash}/{filename}"),
+                        "storage_url": url,
+                        "provider": "vercel_blob"
+                    }
+            except Exception as e:
+                print(f"[VaultStorage] Vercel Blob upload warning: {e}. Falling back to persistent vault storage.")
+
+        # 2. Cloud: S3 / MinIO if S3_BUCKET_NAME is configured
+        s3_bucket = os.environ.get("S3_BUCKET_NAME")
+        if s3_bucket and (os.environ.get("AWS_ACCESS_KEY_ID") or os.environ.get("STORAGE_ENDPOINT")):
+            try:
+                from backend.cloud_storage import CloudStorageService
+                cs = CloudStorageService(bucket_name=s3_bucket)
+                res = cs.upload_evidence_file(file_bytes, filename, content_type=mime_type)
+                presigned = cs.generate_presigned_url(res["path"])
+                return {
+                    "storage_path": res["path"],
+                    "storage_url": presigned,
+                    "provider": "s3_minio"
+                }
+            except Exception as e:
+                print(f"[VaultStorage] S3/MinIO upload warning: {e}. Falling back to persistent vault storage.")
+
+        # 3. Persistent Vault Storage on local server (durable across restarts, not in /tmp)
+        safe_name = re.sub(r"[^A-Za-z0-9._-]", "_", filename)
+        user_vault = os.path.join(EVIDENCE_VAULT_DIR, user_id, sha256_hash)
+        os.makedirs(user_vault, mode=0o700, exist_ok=True)
+        file_path = os.path.join(user_vault, safe_name)
+        with open(file_path, "wb") as f:
+            f.write(file_bytes)
+        try:
+            os.chmod(file_path, 0o600)
+        except Exception:
+            pass
+        return {
+            "storage_path": file_path,
+            "storage_url": f"/api/vault_assets/{sha256_hash[:12]}/download",
+            "provider": "persistent_vault"
+        }
+
 EMAIL_REGEX = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$")
 ALLOWED_ACCOUNT_STATUSES = {"ACTIVE", "SUSPENDED"}
 
@@ -687,6 +815,38 @@ def init_db():
     # Quick probe avoids 100+ cross-region HTTP round trips on every server startup.
     if getattr(conn, "is_turso", False):
         try:
+            c.execute("""
+            CREATE TABLE IF NOT EXISTS user_wearables (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                device_id TEXT NOT NULL,
+                device_name TEXT NOT NULL,
+                device_category TEXT NOT NULL,
+                mac_address TEXT,
+                battery_level INTEGER,
+                signal_strength TEXT,
+                status TEXT NOT NULL DEFAULT 'CONNECTED',
+                services_json TEXT,
+                last_connected_at TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+            """)
+            c.execute("CREATE INDEX IF NOT EXISTS idx_user_wearables_user ON user_wearables(user_id);")
+            c.execute("""
+            CREATE TABLE IF NOT EXISTS wearable_connection_logs (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                wearable_id TEXT,
+                event_type TEXT NOT NULL,
+                device_name TEXT,
+                device_category TEXT,
+                details_json TEXT,
+                timestamp TEXT NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+            """)
+            c.execute("CREATE INDEX IF NOT EXISTS idx_wearable_logs_user ON wearable_connection_logs(user_id, timestamp DESC);")
             c.execute("SELECT COUNT(*) FROM users;")
             cnt = c.fetchone()[0]
             print(f"[Database] Connected to Turso Cloud SQLite (database-green-mountain) & RBAC ready ({cnt} users).")
@@ -938,17 +1098,29 @@ def init_db():
             owner_email TEXT,
             name TEXT NOT NULL,
             file_type TEXT NOT NULL,
+            category TEXT,
             hash_sha256 TEXT NOT NULL,
             tamper_check TEXT NOT NULL,
             status TEXT NOT NULL,
             timestamp TEXT NOT NULL,
             size_mb TEXT,
+            size_bytes INTEGER,
+            storage_path TEXT,
+            storage_url TEXT,
             chain_of_custody TEXT
         );
         """
     )
     _ensure_column(c, "vault_assets", "owner_user_id", "TEXT")
     _ensure_column(c, "vault_assets", "owner_email", "TEXT")
+    _ensure_column(c, "vault_assets", "category", "TEXT")
+    _ensure_column(c, "vault_assets", "size_bytes", "INTEGER")
+    _ensure_column(c, "vault_assets", "storage_path", "TEXT")
+    _ensure_column(c, "vault_assets", "storage_url", "TEXT")
+    try:
+        c.execute("DELETE FROM vault_assets WHERE owner_user_id IS NULL OR id IN ('EV-101', 'EV-102', 'EV-103', 'EV-104', 'EV-105', 'EV-106');")
+    except Exception:
+        pass
 
     c.execute(
         """
@@ -1188,6 +1360,41 @@ def init_db():
     c.execute("CREATE INDEX IF NOT EXISTS idx_audio_evidence_user ON audio_evidence(user_id, created_at DESC);")
     c.execute("CREATE INDEX IF NOT EXISTS idx_audio_evidence_sos ON audio_evidence(sos_event_id);")
     os.makedirs(AUDIO_VAULT_DIR, mode=0o700, exist_ok=True)
+    os.makedirs(EVIDENCE_VAULT_DIR, mode=0o700, exist_ok=True)
+
+    # Wearables & Connected Devices
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS user_wearables (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        device_id TEXT NOT NULL,
+        device_name TEXT NOT NULL,
+        device_category TEXT NOT NULL,
+        mac_address TEXT,
+        battery_level INTEGER,
+        signal_strength TEXT,
+        status TEXT NOT NULL DEFAULT 'CONNECTED',
+        services_json TEXT,
+        last_connected_at TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_user_wearables_user ON user_wearables(user_id);")
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS wearable_connection_logs (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        wearable_id TEXT,
+        event_type TEXT NOT NULL,
+        device_name TEXT,
+        device_category TEXT,
+        details_json TEXT,
+        timestamp TEXT NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_wearable_logs_user ON wearable_connection_logs(user_id, timestamp DESC);")
 
     # Seed domain tables ONLY when completely empty (never overwrites existing DB)
     c.execute("SELECT COUNT(*) FROM sos_cases;")
@@ -1331,7 +1538,9 @@ class SQLiteAPIHandler(BaseHTTPRequestHandler):
         cur_dir = os.path.dirname(os.path.abspath(__file__))
         candidates = [
             os.path.join(cur_dir, "..", "she_shield", "build", "web"),
+            os.path.join(cur_dir, "..", "build", "web"),
             os.path.join(cur_dir, "build", "web"),
+            os.path.join(cur_dir, "..", "..", "she_shield", "build", "web"),
         ]
         web_root = None
         for c in candidates:
@@ -1655,6 +1864,253 @@ class SQLiteAPIHandler(BaseHTTPRequestHandler):
         log_audit(c, auth["user"]["id"], "AUDIO_EVIDENCE_DELETED", rec_id, f"Securely deleted {row['filename']}")
         c.connection.commit()
         self._send_json({"success": True, "deletedId": rec_id})
+
+    def _serve_vault_binary(self, c, asset_id: str, as_attachment: bool):
+        auth = self._require_auth(c)
+        if not auth:
+            c.connection.commit()
+            return
+
+        row = c.execute("SELECT * FROM vault_assets WHERE id = ?;", (asset_id,)).fetchone()
+        if not row:
+            self._send_json({"error": "Evidence asset not found."}, status=404)
+            return
+
+        # Check permissions: owner or officer with vault:view_all. Guardians cannot access private evidence.
+        is_owner = (row["owner_user_id"] == auth["user"]["id"] or (row["owner_email"] and row["owner_email"].lower() == auth["user"]["email"].lower()))
+        can_view_all = "vault:view_all" in auth["permissions"]
+        if not is_owner and not can_view_all:
+            log_audit(c, auth["user"]["id"], "VAULT_ACCESS_DENIED", asset_id, "Ownership mismatch / Unauthorized guardian")
+            c.connection.commit()
+            self._send_json({"error": "Forbidden: you do not have permission to access this evidence asset."}, status=403)
+            return
+
+        file_path = row["storage_path"]
+        if not file_path or not os.path.isfile(file_path):
+            found = None
+            user_dir = os.path.join(EVIDENCE_VAULT_DIR, row["owner_user_id"] or auth["user"]["id"])
+            if os.path.isdir(user_dir):
+                for root, _, files in os.walk(user_dir):
+                    if row["name"] in files:
+                        found = os.path.join(root, row["name"])
+                        break
+            if found and os.path.isfile(found):
+                file_path = found
+            else:
+                self._send_json({"error": "Evidence binary file missing from vault storage."}, status=404)
+                return
+
+        file_size = os.path.getsize(file_path)
+        _, ext = os.path.splitext(row["name"])
+        content_type = ALLOWED_VAULT_EXTENSIONS.get(ext.lower(), "application/octet-stream")
+
+        disposition = "attachment" if as_attachment else "inline"
+        safe_name = row["name"].replace('"', '\\"')
+
+        range_header = self.headers.get("Range")
+        start = 0
+        end = file_size - 1
+        status_code = 200
+
+        if range_header and range_header.startswith("bytes=") and file_size > 0:
+            try:
+                spec = range_header.replace("bytes=", "").split(",")[0].strip()
+                start_str, end_str = spec.split("-", 1)
+                if start_str:
+                    start = int(start_str)
+                if end_str:
+                    end = min(int(end_str), file_size - 1)
+                if start < 0 or start > end or end >= file_size:
+                    self._send_json({"error": "Requested range not satisfiable."}, status=416)
+                    return
+                status_code = 206
+            except Exception:
+                start = 0
+                end = file_size - 1
+                status_code = 200
+
+        length = end - start + 1
+        self.send_response(status_code)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Disposition", f'{disposition}; filename="{safe_name}"')
+        self.send_header("Accept-Ranges", "bytes")
+        self.send_header("Content-Length", str(length))
+        if status_code == 206:
+            self.send_header("Content-Range", f"bytes {start}-{end}/{file_size}")
+        self._send_cors()
+        self.end_headers()
+
+        with open(file_path, "rb") as f:
+            if start > 0:
+                f.seek(start)
+            remaining = length
+            chunk_size = 64 * 1024
+            while remaining > 0:
+                read_len = min(remaining, chunk_size)
+                buf = f.read(read_len)
+                if not buf:
+                    break
+                self.wfile.write(buf)
+                remaining -= len(buf)
+
+    def _delete_vault_asset(self, c, asset_id: str):
+        auth = self._require_auth(c)
+        if not auth:
+            c.connection.commit()
+            return
+
+        row = c.execute("SELECT * FROM vault_assets WHERE id = ?;", (asset_id,)).fetchone()
+        if not row:
+            self._send_json({"error": "Evidence asset not found."}, status=404)
+            return
+
+        is_owner = (row["owner_user_id"] == auth["user"]["id"] or (row["owner_email"] and row["owner_email"].lower() == auth["user"]["email"].lower()))
+        can_manage = "vault:manage" in auth["permissions"]
+        if not is_owner and not can_manage:
+            log_audit(c, auth["user"]["id"], "VAULT_DELETE_DENIED", asset_id, "Ownership mismatch")
+            c.connection.commit()
+            self._send_json({"error": "Forbidden: you do not own this evidence asset."}, status=403)
+            return
+
+        file_path = row["storage_path"]
+        if file_path and os.path.isfile(file_path):
+            try:
+                sz = os.path.getsize(file_path)
+                with open(file_path, "r+b") as f:
+                    f.write(b"\x00" * min(sz, 1024 * 1024))
+                    f.flush()
+                os.remove(file_path)
+            except Exception:
+                try:
+                    os.remove(file_path)
+                except Exception:
+                    pass
+
+        c.execute("DELETE FROM vault_assets WHERE id = ?;", (asset_id,))
+        log_audit(c, auth["user"]["id"], "VAULT_EVIDENCE_DELETED", asset_id, f"Securely deleted {row['name']}")
+        c.connection.commit()
+        self._send_json({"success": True, "deletedId": asset_id})
+
+    def _handle_vault_upload(self, c):
+        auth = self._require_auth(c)
+        if not auth:
+            c.connection.commit()
+            return
+
+        # Check permissions: guardians cannot upload to or modify private evidence vault
+        if "vault:upload" not in auth["permissions"] and "vault:view_own" not in auth["permissions"] and auth.get("role") != "registered_user":
+            self._send_json({"error": "Forbidden: account not authorized to upload evidence."}, status=403)
+            return
+
+        try:
+            content_length = int(self.headers.get("Content-Length", 0))
+        except ValueError:
+            self._send_json({"error": "Invalid Content-Length header."}, status=400)
+            return
+
+        if content_length <= 0:
+            self._send_json({"error": "Evidence file body cannot be empty."}, status=400)
+            return
+        if content_length > MAX_VAULT_BYTES:
+            self._send_json({"error": "File exceeds 50 MB maximum size limit."}, status=413)
+            return
+
+        meta_raw = self.headers.get("X-Evidence-Meta", "").strip()
+        meta = {}
+        if meta_raw:
+            try:
+                meta = json.loads(meta_raw)
+            except Exception:
+                pass
+
+        filename = (meta.get("filename") or "evidence.bin").strip()
+        _, ext = os.path.splitext(filename)
+        ext = ext.lower()
+
+        # Validate file extension against allowed formats
+        if ext not in ALLOWED_VAULT_EXTENSIONS:
+            self._send_json({"error": f"Unsupported evidence file format: {ext or 'unknown'}. Supported formats: Photos (.png, .jpg, .webp), Videos (.mp4, .mov, .mkv), Audio (.mp3, .wav, .m4a), Documents (.pdf, .docx, .txt), Telemetry (.json)"}, status=400)
+            return
+
+        mime_type = ALLOWED_VAULT_EXTENSIONS[ext]
+        raw_bytes = self.rfile.read(content_length)
+        if len(raw_bytes) != content_length:
+            self._send_json({"error": "Incomplete upload: payload size mismatch."}, status=400)
+            return
+
+        computed_sha256 = hashlib.sha256(raw_bytes).hexdigest()
+        client_sha = (meta.get("clientSha256") or "").strip().lower()
+        if client_sha and client_sha != computed_sha256:
+            self._send_json({"error": "Cryptographic integrity mismatch: client SHA-256 does not match server SHA-256."}, status=400)
+            return
+
+        category_code, category_label = infer_evidence_category(filename, meta.get("category"))
+        asset_id = f"EV-{uuid.uuid4().hex[:8].upper()}"
+        now_iso = utc_now_iso()
+
+        # Format human-readable size
+        if len(raw_bytes) >= 1024 * 1024:
+            size_str = f"{(len(raw_bytes) / (1024 * 1024)):.2f} MB"
+        else:
+            size_str = f"{(len(raw_bytes) / 1024):.1f} KB"
+
+        # Store in persistent vault / cloud storage
+        storage_res = VaultStorageManager.store_file(
+            file_bytes=raw_bytes,
+            user_id=auth["user"]["id"],
+            sha256_hash=computed_sha256,
+            filename=filename,
+            mime_type=mime_type,
+        )
+
+        storage_path = storage_res["storage_path"]
+        storage_url = f"/api/vault_assets/{asset_id}/download"
+        chain_of_custody = meta.get("chainOfCustody") or f"Device File Storage -> Cryptographic SHA-256 ({computed_sha256[:16]}...) -> Encrypted Vault Ledger"
+
+        c.execute(
+            """
+            INSERT INTO vault_assets (
+                id, owner_user_id, owner_email, name, file_type, category,
+                hash_sha256, tamper_check, status, timestamp, size_mb, size_bytes,
+                storage_path, storage_url, chain_of_custody
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'PASS', 'Uploaded', ?, ?, ?, ?, ?, ?);
+            """,
+            (
+                asset_id,
+                auth["user"]["id"],
+                auth["user"]["email"],
+                filename,
+                category_code,
+                category_label,
+                f"SHA256: {computed_sha256}",
+                now_iso,
+                size_str,
+                len(raw_bytes),
+                storage_path,
+                storage_url,
+                chain_of_custody,
+            ),
+        )
+
+        log_audit(c, auth["user"]["id"], "VAULT_EVIDENCE_UPLOADED", asset_id, f"Uploaded {filename} ({size_str}, SHA256: {computed_sha256})")
+        c.connection.commit()
+
+        self._send_json({
+            "success": True,
+            "id": asset_id,
+            "name": filename,
+            "fileType": category_code,
+            "category": category_label,
+            "sizeMb": size_str,
+            "sizeBytes": len(raw_bytes),
+            "hash": f"SHA256: {computed_sha256}",
+            "tamperCheck": "PASS",
+            "status": "Uploaded",
+            "timestamp": now_iso,
+            "storageUrl": storage_url,
+            "chainOfCustody": chain_of_custody,
+        }, status=201)
 
     def _record_journey_event(self, c, journey_id: str, event_type: str, details: str = None, lat=None, lng=None):
         c.execute(
@@ -2310,6 +2766,14 @@ class SQLiteAPIHandler(BaseHTTPRequestHandler):
             if m:
                 self._delete_audio_evidence(c, m.group(1))
                 return
+            m_vault = re.fullmatch(r"/api/vault_assets/([A-Za-z0-9_-]+)", path)
+            if m_vault:
+                self._delete_vault_asset(c, m_vault.group(1))
+                return
+            if not path.startswith("/api/"):
+                if self._serve_static_file(path):
+                    return
+
             self._send_json({"error": "Endpoint not found"}, status=404)
         except Exception as e:
             self._send_json({"error": str(e)}, status=500)
@@ -2440,6 +2904,89 @@ class SQLiteAPIHandler(BaseHTTPRequestHandler):
             m_download = re.fullmatch(r"/api/audio_evidence/([A-Za-z0-9_-]+)/download", path)
             if m_download:
                 self._serve_audio_binary(c, m_download.group(1), as_attachment=True)
+                return
+
+            m_vault_stream = re.fullmatch(r"/api/vault_assets/([A-Za-z0-9_-]+)/preview", path)
+            if m_vault_stream:
+                self._serve_vault_binary(c, m_vault_stream.group(1), as_attachment=False)
+                return
+
+            m_vault_download = re.fullmatch(r"/api/vault_assets/([A-Za-z0-9_-]+)/download", path)
+            if m_vault_download:
+                self._serve_vault_binary(c, m_vault_download.group(1), as_attachment=True)
+                return
+
+            # Wearable Integration: List user's paired wearables
+            if path == "/api/wearables":
+                auth = self._require_auth(c)
+                if not auth:
+                    conn.commit()
+                    return
+                rows = c.execute(
+                    """
+                    SELECT * FROM user_wearables
+                    WHERE user_id = ?
+                    ORDER BY last_connected_at DESC;
+                    """,
+                    (auth["user"]["id"],),
+                ).fetchall()
+                wearables = []
+                for r in rows:
+                    srv = []
+                    if r["services_json"]:
+                        try:
+                            srv = json.loads(r["services_json"])
+                        except Exception:
+                            srv = []
+                    wearables.append({
+                        "id": r["id"],
+                        "deviceId": r["device_id"],
+                        "deviceName": r["device_name"],
+                        "deviceCategory": r["device_category"],
+                        "macAddress": r["mac_address"],
+                        "batteryLevel": r["battery_level"],
+                        "signalStrength": r["signal_strength"],
+                        "status": r["status"],
+                        "services": srv,
+                        "lastConnectedAt": r["last_connected_at"],
+                        "createdAt": r["created_at"],
+                    })
+                self._send_json({"wearables": wearables})
+                return
+
+            # Wearable Integration: List wearable connection & trigger event logs
+            if path == "/api/wearables/logs":
+                auth = self._require_auth(c)
+                if not auth:
+                    conn.commit()
+                    return
+                rows = c.execute(
+                    """
+                    SELECT * FROM wearable_connection_logs
+                    WHERE user_id = ?
+                    ORDER BY timestamp DESC
+                    LIMIT 50;
+                    """,
+                    (auth["user"]["id"],),
+                ).fetchall()
+                logs = []
+                for r in rows:
+                    det = {}
+                    if r["details_json"]:
+                        try:
+                            det = json.loads(r["details_json"])
+                        except Exception:
+                            det = {}
+                    logs.append({
+                        "id": r["id"],
+                        "wearableId": r["wearable_id"],
+                        "eventType": r["event_type"],
+                        "deviceName": r["device_name"],
+                        "deviceCategory": r["device_category"],
+                        "details": det,
+                        "timestamp": r["timestamp"],
+                    })
+                self._send_json({"logs": logs})
                 return
 
             # Admin endpoints
@@ -2610,18 +3157,20 @@ class SQLiteAPIHandler(BaseHTTPRequestHandler):
                 if "vault:view_all" in auth["permissions"]:
                     rows = c.execute(
                         """
-                        SELECT id, name, file_type as fileType, hash_sha256 as hash,
+                        SELECT id, name, file_type as fileType, category, hash_sha256 as hash,
                                tamper_check as tamperCheck, status, timestamp, size_mb as sizeMb,
-                               chain_of_custody as chainOfCustody
+                               size_bytes as sizeBytes, storage_path as storagePath,
+                               storage_url as storageUrl, chain_of_custody as chainOfCustody
                         FROM vault_assets ORDER BY timestamp DESC;
                         """
                     ).fetchall()
-                elif "vault:view_own" in auth["permissions"]:
+                elif "vault:view_own" in auth["permissions"] or auth.get("role") == "registered_user":
                     rows = c.execute(
                         """
-                        SELECT id, name, file_type as fileType, hash_sha256 as hash,
+                        SELECT id, name, file_type as fileType, category, hash_sha256 as hash,
                                tamper_check as tamperCheck, status, timestamp, size_mb as sizeMb,
-                               chain_of_custody as chainOfCustody
+                               size_bytes as sizeBytes, storage_path as storagePath,
+                               storage_url as storageUrl, chain_of_custody as chainOfCustody
                         FROM vault_assets
                         WHERE owner_user_id = ? OR LOWER(COALESCE(owner_email, '')) = ?
                         ORDER BY timestamp DESC;
@@ -2629,7 +3178,7 @@ class SQLiteAPIHandler(BaseHTTPRequestHandler):
                         (auth["user"]["id"], auth["user"]["email"]),
                     ).fetchall()
                 else:
-                    self._send_json({"error": "Forbidden"}, status=403)
+                    self._send_json({"error": "Forbidden: Guardians cannot access private evidence vault without explicit authorization."}, status=403)
                     return
                 self._send_json([dict(r) for r in rows])
                 return
@@ -2976,6 +3525,10 @@ class SQLiteAPIHandler(BaseHTTPRequestHandler):
                 self._send_json({"journey": dto})
                 return
 
+            if not path.startswith("/api/"):
+                if self._serve_static_file(path):
+                    return
+
             self._send_json({"error": "Endpoint not found"}, status=404)
 
         except Exception as e:
@@ -2990,6 +3543,11 @@ class SQLiteAPIHandler(BaseHTTPRequestHandler):
         c = conn.cursor()
 
         try:
+            # Handle binary vault evidence upload BEFORE JSON body reader
+            if path == "/api/vault_assets/upload":
+                self._handle_vault_upload(c)
+                return
+
             # Handle binary audio evidence upload BEFORE JSON body reader
             if path == "/api/audio_evidence":
                 auth = self._require_permission(c, "audio_evidence:own")
@@ -3234,6 +3792,11 @@ class SQLiteAPIHandler(BaseHTTPRequestHandler):
             m_del_post = re.fullmatch(r"/api/audio_evidence/([A-Za-z0-9_-]+)/delete", path)
             if m_del_post:
                 self._delete_audio_evidence(c, m_del_post.group(1))
+                return
+
+            m_vault_del_post = re.fullmatch(r"/api/vault_assets/([A-Za-z0-9_-]+)/delete", path)
+            if m_vault_del_post:
+                self._delete_vault_asset(c, m_vault_del_post.group(1))
                 return
             # ------------------------------------------------------------------
             # PUBLIC AUTHENTICATION ENDPOINTS
@@ -3680,16 +4243,102 @@ class SQLiteAPIHandler(BaseHTTPRequestHandler):
                 return
 
             if path in ("/api/sos_cases/update_status", "/api/cases/update_status"):
-                auth = self._require_permission(c, "sos:update_status")
+                auth = self._require_auth(c)
                 if not auth:
                     conn.commit()
                     return
                 case_id = data.get("id") or data.get("caseId")
                 status = (data.get("status") or "open").lower()
+                case_row = c.execute("SELECT user_id FROM sos_cases WHERE id = ?;", (case_id,)).fetchone()
+                is_owner = bool(case_row and case_row["user_id"] == auth["user"]["id"])
+                has_perm = "sos:update_status" in auth.get("permissions", [])
+                if not is_owner and not has_perm:
+                    self._send_json({"error": "Forbidden: Insufficient permissions to update this case."}, status=403)
+                    conn.commit()
+                    return
                 c.execute("UPDATE sos_cases SET status = ? WHERE id = ?;", (status, case_id))
                 log_audit(c, auth["user"]["id"], "SOS_STATUS_UPDATE", case_id, f"Status -> {status}")
                 conn.commit()
                 self._send_json({"success": True, "id": case_id, "status": status})
+                return
+
+            # Wearable Integration: Persist / Sync paired wearable device
+            if path == "/api/wearables/sync":
+                auth = self._require_auth(c)
+                if not auth:
+                    conn.commit()
+                    return
+                wearable_id = data.get("id") or f"ble-{uuid.uuid4().hex[:10]}"
+                dev_id = (data.get("deviceId") or data.get("id") or "UNKNOWN_BLE").strip()
+                dev_name = (data.get("deviceName") or "Smart Wearable").strip()
+                dev_cat = (data.get("deviceCategory") or "Smart Ring").strip()
+                mac_addr = (data.get("macAddress") or "").strip()
+                batt_lvl = data.get("batteryLevel")
+                sig_str = (data.get("signalStrength") or "Good").strip()
+                status = (data.get("status") or "CONNECTED").strip().upper()
+                services_list = data.get("services") or []
+                services_json = json.dumps(services_list)
+                now_iso = utc_now_iso()
+
+                existing = c.execute(
+                    "SELECT id FROM user_wearables WHERE user_id = ? AND device_id = ?;",
+                    (auth["user"]["id"], dev_id)
+                ).fetchone()
+
+                if existing:
+                    c.execute(
+                        """
+                        UPDATE user_wearables
+                        SET device_name = ?, device_category = ?, mac_address = ?,
+                            battery_level = ?, signal_strength = ?, status = ?,
+                            services_json = ?, last_connected_at = ?
+                        WHERE id = ?;
+                        """,
+                        (dev_name, dev_cat, mac_addr, batt_lvl, sig_str, status, services_json, now_iso, existing["id"])
+                    )
+                    saved_id = existing["id"]
+                else:
+                    c.execute(
+                        """
+                        INSERT INTO user_wearables (
+                            id, user_id, device_id, device_name, device_category,
+                            mac_address, battery_level, signal_strength, status,
+                            services_json, last_connected_at, created_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                        """,
+                        (wearable_id, auth["user"]["id"], dev_id, dev_name, dev_cat, mac_addr, batt_lvl, sig_str, status, services_json, now_iso, now_iso)
+                    )
+                    saved_id = wearable_id
+
+                log_audit(c, auth["user"]["id"], "WEARABLE_SYNC", dev_id, f"{dev_name} ({dev_cat}) - {status}")
+                conn.commit()
+                self._send_json({"success": True, "id": saved_id, "status": status})
+                return
+
+            # Wearable Integration: Log wearable connection or SOS button trigger events
+            if path == "/api/wearables/log_event":
+                auth = self._require_auth(c)
+                if not auth:
+                    conn.commit()
+                    return
+                log_id = f"wlog-{uuid.uuid4().hex[:10]}"
+                ev_type = (data.get("eventType") or "EVENT").strip().upper()
+                w_id = (data.get("wearableId") or "").strip()
+                dev_name = (data.get("deviceName") or "").strip()
+                dev_cat = (data.get("deviceCategory") or "").strip()
+                details_json = json.dumps(data.get("details") or {})
+                now_iso = utc_now_iso()
+
+                c.execute(
+                    """
+                    INSERT INTO wearable_connection_logs (
+                        id, user_id, wearable_id, event_type, device_name, device_category, details_json, timestamp
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+                    """,
+                    (log_id, auth["user"]["id"], w_id, ev_type, dev_name, dev_cat, details_json, now_iso)
+                )
+                conn.commit()
+                self._send_json({"success": True, "id": log_id})
                 return
 
             if path == "/api/cyber_complaints":
@@ -3737,28 +4386,41 @@ class SQLiteAPIHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/api/vault_assets":
-                auth = self._require_permission(c, "vault:upload")
+                auth = self._require_auth(c)
                 if not auth:
                     conn.commit()
                     return
-                asset_id = data.get("id") or f"EV-{uuid.uuid4().hex[:8]}"
+                if "vault:upload" not in auth["permissions"] and "vault:view_own" not in auth["permissions"] and auth.get("role") != "registered_user":
+                    self._send_json({"error": "Forbidden: account not authorized to upload evidence."}, status=403)
+                    return
+                asset_id = data.get("id") or f"EV-{uuid.uuid4().hex[:8].upper()}"
+                orig_name = data.get("name", "Evidence.bin")
+                cat_code, cat_label = infer_evidence_category(orig_name, data.get("category"))
                 c.execute(
                     """
-                    INSERT INTO vault_assets (id, owner_user_id, owner_email, name, file_type, hash_sha256, tamper_check, status, timestamp, size_mb, chain_of_custody)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO vault_assets (
+                        id, owner_user_id, owner_email, name, file_type, category,
+                        hash_sha256, tamper_check, status, timestamp, size_mb, size_bytes,
+                        storage_path, storage_url, chain_of_custody
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(id) DO UPDATE SET status=excluded.status;
                     """,
                     (
                         asset_id,
                         auth["user"]["id"],
                         auth["user"]["email"],
-                        data.get("name", "Evidence.bin"),
-                        data.get("fileType", "FILE"),
+                        orig_name,
+                        data.get("fileType") or cat_code,
+                        data.get("category") or cat_label,
                         data.get("hash") or data.get("hash_sha256", "SHA256:..."),
                         data.get("tamperCheck", "PASS"),
                         data.get("status", "Uploaded"),
                         data.get("timestamp") or utc_now_iso(),
                         data.get("sizeMb", "1.0 MB"),
+                        data.get("sizeBytes") or 1048576,
+                        data.get("storagePath") or "",
+                        data.get("storageUrl") or f"/api/vault_assets/{asset_id}/download",
                         data.get("chainOfCustody", "Vault"),
                     ),
                 )
@@ -4840,6 +5502,10 @@ class SQLiteAPIHandler(BaseHTTPRequestHandler):
                 conn.commit()
                 self._send_json({"success": True})
                 return
+
+            if not path.startswith("/api/"):
+                if self._serve_static_file(path):
+                    return
 
             self._send_json({"error": "Endpoint not found"}, status=404)
 

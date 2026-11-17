@@ -550,6 +550,7 @@ window.SheShieldVoiceBridge = (() => {
     resumePlayback,
     stopPlayback,
     downloadAuthAudio,
+    downloadAuthFile: downloadAuthAudio,
     offlineSave,
     offlineList,
     offlineGetBytes,

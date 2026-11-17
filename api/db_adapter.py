@@ -46,7 +46,7 @@ class DictRow(tuple):
         instance._index = {}
         if description:
             for i, desc in enumerate(description):
-                col_name = desc[0] if isinstance(desc, (list, tuple)) else str(desc)
+                col_name = getattr(desc, "name", None) or (desc[0] if isinstance(desc, (list, tuple)) else str(desc))
                 instance._index[col_name] = i
                 # Also store lowercase variant for case-insensitive lookup
                 instance._index[col_name.lower()] = i
@@ -511,17 +511,24 @@ def get_db(sqlite_fallback_path: str = None):
     2. Returns PostgreSQL connection if DATABASE_URL is set.
     3. Falls back to local SQLite file.
     """
-    # 1. Turso Cloud SQLite (Vercel Marketplace)
-    if is_cloud_turso_configured():
-        url, token = get_turso_config()
-        return TursoConnectionWrapper(url, token)
-
-    # 2. PostgreSQL (Neon)
+    # 1. PostgreSQL (Neon) takes precedence whenever a PostgreSQL URL is configured
     url = get_database_url()
     if url and (url.startswith("postgres://") or url.startswith("postgresql://")):
         return connect_postgres(url)
 
-    # 3. Offline / Local fallback to SQLite
+    # 2. Turso Cloud libSQL (if configured and no PostgreSQL URL)
+    if is_cloud_turso_configured():
+        turso_url, token = get_turso_config()
+        return TursoConnectionWrapper(turso_url, token)
+
+    # 3. In production on Vercel, forbid fallback to SQLite
+    if os.environ.get("VERCEL") == "1" or os.environ.get("VERCEL_ENV") in ("production", "preview"):
+        raise RuntimeError(
+            "CRITICAL: Production deployment requires a cloud database (DATABASE_URL / POSTGRES_URL). "
+            "Local SQLite fallback is strictly prohibited in production."
+        )
+
+    # 4. Offline / Local fallback to SQLite only during local offline development
     if not sqlite_fallback_path:
         api_dir = os.path.dirname(os.path.abspath(__file__))
         sqlite_fallback_path = os.environ.get("SHESHIELD_DB_PATH") or os.path.join(api_dir, "she_shield.db")

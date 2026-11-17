@@ -22,5 +22,7 @@ firebase/
 
 # Non-web platforms & test captures inside she_shield
 she_shield/test/
+she_shield/android/
+she_shield/.dart_tool/
 she_shield/*.png
 she_shield/*.bat

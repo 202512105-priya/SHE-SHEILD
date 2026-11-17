@@ -348,6 +348,84 @@ class VoiceEngineService extends ChangeNotifier {
     return true;
   }
 
+  /// Triggers automatic microphone audio recording for a Wearable BLE SOS event
+  Future<bool> triggerWearableAudioRecording(
+    DatabaseService db, {
+    required String sosId,
+  }) async {
+    _boundDb = db;
+    _errorMessage = null;
+    _lastSavedRecording = null;
+    _lastSavedOffline = false;
+    _uploadProgress = 0.0;
+
+    await platformStopListening();
+
+    final recId = 'AUD-${DateTime.now().millisecondsSinceEpoch}';
+    _activeSosEventId = sosId;
+    _activeRecordingId = recId;
+
+    // Request / verify microphone permission
+    final granted = await requestMicPermission();
+    if (!granted) {
+      _setState(
+        VoiceSosState.FAILED,
+        detail: 'Wearable SOS dispatched, but microphone permission was denied for audio recording.',
+        error: _errorMessage ?? 'Microphone permission denied.',
+      );
+      return false;
+    }
+
+    final fileName = 'wearable_sos_${sosId}_$recId.m4a';
+    final recStart = await platformStartRecording(
+      fileName: fileName,
+      onInterrupted: (reason) {
+        if (_state == VoiceSosState.RECORDING) {
+          stopRecordingAndSave(db, reason: 'System interrupted ($reason)');
+        }
+      },
+      onLevel: (level) {
+        _audioLevel = level;
+        notifyListeners();
+      },
+    );
+
+    if (!recStart.ok) {
+      _setState(
+        VoiceSosState.FAILED,
+        detail: 'Failed to start microphone recorder: ${recStart.error}',
+        error: recStart.error ?? 'Recorder error',
+      );
+      return false;
+    }
+
+    _recordingStartedAt = DateTime.now().toUtc();
+    _elapsedSeconds = 0;
+    _maxDurationSeconds = db.maxRecordingDurationSec;
+
+    _setState(
+      VoiceSosState.RECORDING,
+      detail: 'Recording emergency wearable audio for SOS $sosId (Max ${_maxDurationSeconds}s)',
+    );
+
+    _recordTimer?.cancel();
+    _recordTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (_state != VoiceSosState.RECORDING) {
+        t.cancel();
+        return;
+      }
+      _elapsedSeconds++;
+      if (_elapsedSeconds >= _maxDurationSeconds) {
+        t.cancel();
+        stopRecordingAndSave(db, reason: 'Maximum recording duration reached');
+      } else {
+        notifyListeners();
+      }
+    });
+
+    return true;
+  }
+
   /// Stops active microphone recording, verifies playable audio & SHA-256, and saves to SQLite Vault (or Offline Store).
   Future<bool> stopRecordingAndSave(
     DatabaseService db, {

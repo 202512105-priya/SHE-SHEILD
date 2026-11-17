@@ -563,6 +563,45 @@ class LocalDatabaseService {
     return res.success;
   }
 
+  // WEARABLES & CONNECTED DEVICES APIS
+  // ---------------------------------------------------------------------------
+
+  Future<bool> syncWearableDevice(Map<String, dynamic> wearableData) async {
+    final res = await _requestJson(
+      method: 'POST',
+      endpoint: '/api/wearables/sync',
+      payload: wearableData,
+    );
+    return res.success;
+  }
+
+  Future<List<Map<String, dynamic>>?> getConnectedWearables() async {
+    final res = await _requestJson(method: 'GET', endpoint: '/api/wearables');
+    if (res.success && res.data is Map && (res.data as Map)['wearables'] is List) {
+      final list = (res.data as Map)['wearables'] as List;
+      return list.map((item) => Map<String, dynamic>.from(item as Map)).toList();
+    }
+    return null;
+  }
+
+  Future<bool> logWearableEvent(Map<String, dynamic> eventData) async {
+    final res = await _requestJson(
+      method: 'POST',
+      endpoint: '/api/wearables/log_event',
+      payload: eventData,
+    );
+    return res.success;
+  }
+
+  Future<List<Map<String, dynamic>>?> getWearableLogs() async {
+    final res = await _requestJson(method: 'GET', endpoint: '/api/wearables/logs');
+    if (res.success && res.data is Map && (res.data as Map)['logs'] is List) {
+      final list = (res.data as Map)['logs'] as List;
+      return list.map((item) => Map<String, dynamic>.from(item as Map)).toList();
+    }
+    return null;
+  }
+
   Future<List<Map<String, dynamic>>?> getCyberComplaints() async {
     final res = await _requestJson(method: 'GET', endpoint: '/api/cyber_complaints');
     if (res.success && res.data is List) {
